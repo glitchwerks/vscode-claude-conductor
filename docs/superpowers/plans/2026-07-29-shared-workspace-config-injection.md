@@ -52,7 +52,7 @@ Claude Code's documented precedence model has exactly four tiers — managed pol
 ### 2.4 `claudeCommand` is a free-form user string — appending flags to it is structurally fragile
 
 `claudeConductor.claudeCommand` is declared `"type": "string", "default": "claude"` with description "The Claude Code CLI command to run" (`package.json:151-155`). Nothing constrains it to a bare executable — a user may legitimately have set it to `claude --model opus`, a wrapper script, or a command with a positional argument. Two consequences:
-- Blindly appending ` --add-dir <path>` produces an argument order the user did not design, and its validity is unverified for non-default values.
+- Blindly appending `--add-dir <path>` produces an argument order the user did not design, and its validity is unverified for non-default values.
 - The `executeCommand(executable, args)` overload (§2.3) is **incompatible** with a user-set `claudeCommand` containing arguments, because using it would require parsing the user's string into executable + args — a shell-parsing problem, not a string-split problem.
 
 ### 2.5 Bash-style env-var prefixes will not work on this project's primary shell

@@ -1,3 +1,5 @@
+# Shared workspace config-injection mechanisms for Claude Code CLI sessions
+
 ## Idea
 
 A shared session config (a single `CLAUDE.md`-equivalent context) that gets injected into every Claude Code CLI session vscode-claude-conductor launches from folders belonging to the same VS Code workspace, layered on top of whatever per-folder `CLAUDE.md` already exists in each session's own directory.

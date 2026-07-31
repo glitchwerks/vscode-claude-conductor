@@ -1,3 +1,5 @@
+# External landscape survey — VS Code, Claude Code CLI, and competing extensions
+
 ## Idea
 
 Survey what has changed in the external landscape (VS Code extension API, Claude Code CLI, and the VS Code marketplace) since vscode-claude-conductor was last actively developed, to flag opportunities and risks against its open pain points: issue #68 (close-detection unreliable on long-running sessions), issue #33 (adopting externally-launched sessions from the official Claude Code extension), issue #44 (spike on a custom pty/process-wrapper), and issue #76 (suppressing VS Code terminal restore).
@@ -111,6 +113,10 @@ Survey what has changed in the external landscape (VS Code extension API, Claude
 - **Assessment: neutral.**
 - **Lift effort:** study-only.
 
+## Circumstantial leads (excluded from ranked shortlist)
+
+The finding below is sourced from dated primary documents, but its own hedging language ("circumstantial," "weak circumstantial support," "no direct causal link found") signals a speculative connection rather than a scored candidate — it carries `Worth borrowing: none` and `Lift effort: n/a`, so it does not belong in a list ranked by expected value. It is excluded from the ranked shortlist above on relevance-strength grounds and kept here as a lead worth revisiting, not because its citations are unverified.
+
 ### 10. Adjacent VS Code terminal-service reliability changes (1.130/1.131) — circumstantial context for #68
 
 - **URL:** `https://github.com/microsoft/vscode-docs/blob/main/release-notes/v1_131.md` (fetched via `mcp__github__get_file_contents`, 2026-07-29) lists five separate merged memory-leak fixes touching terminal internals in the same release: `terminalProcessManager` (PR #326930), `terminalService` (PR #327156), `mainThreadTerminalService` (PR #327155), plus `abstractTaskService` and `debugModel`. `https://github.com/microsoft/vscode-docs/blob/main/release-notes/v1_120.md` separately credits PR #306955 "guarantee that return of `TreeDataProvider.getChildren()` is not mutated by vscode" (merged, milestone 1.120, May 2026).
@@ -118,7 +124,7 @@ Survey what has changed in the external landscape (VS Code extension API, Claude
 - **Maturity:** all merged/shipped as of the versions cited.
 - **Worth borrowing:** none — informational only, supports #68's existing diagnostic-logging plan rather than replacing it.
 - **What to avoid:** don't over-read this as "the bug is now fixed" — none of the five leak fixes is described as terminal-close-event-related; they're general internal leak fixes.
-- **Assessment: neutral-to-opportunity** (weak circumstantial support that upgrading Conductor's `engines.vscode` floor past 1.93 might incidentally help #68, but no direct causal link found).
+- **Assessment: neutral-to-opportunity** (weak circumstantial support that upgrading Conductor's `engines.vscode` floor past 1.93 might incidentally help #68, but no direct causal link found). **Excluded from the ranked shortlist** — its own hedging language marks it as a lead, not a scored candidate; see the section intro above.
 - **Lift effort:** n/a — informational; if pursued, would mean raising `engines.vscode` in `package.json:9`, a compatibility decision outside this survey's scope.
 
 ## Confirmations — mechanisms that already existed and remain unchanged (not "changes," but resolve open questions in #76/#44)
