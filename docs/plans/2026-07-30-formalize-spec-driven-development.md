@@ -394,7 +394,7 @@ git commit -m "docs: fold 2026-04-14 session-manager v1 design into foundational
 
 Do this task after Tasks 1–2: `docs/sdd-workflow.md` documents the paths and the fold-in as they now exist, not as they were originally recommended.
 
-- [ ] **Step 1: Create the file with this content**
+- [x] **Step 1: Create the file with this content**
 
 ````markdown
 # Spec-Driven Development in this repo
@@ -606,7 +606,7 @@ If the `superpowers` plugin is installed:
 Neither is required. Everything above can be done by hand.
 ````
 
-- [ ] **Step 2: Verify the file exists and has no unresolved placeholders**
+- [x] **Step 2: Verify the file exists and has no unresolved placeholders**
 
 ```bash
 grep -nE 'TBD|TODO|FIXME|<fill|XXX' docs/sdd-workflow.md
@@ -614,7 +614,7 @@ grep -nE 'TBD|TODO|FIXME|<fill|XXX' docs/sdd-workflow.md
 
 Expected: no output. (The `<slug>`, `<path>`, `<name>` angle-bracket tokens are intentional template placeholders and are not matched by this pattern.)
 
-- [ ] **Step 3: Verify every repo path named in the file actually exists**
+- [x] **Step 3: Verify every repo path named in the file actually exists**
 
 ```bash
 grep -oE 'docs/[A-Za-z0-9._/-]+\.md' docs/sdd-workflow.md | sort -u | while read -r p; do
@@ -622,9 +622,9 @@ grep -oE 'docs/[A-Za-z0-9._/-]+\.md' docs/sdd-workflow.md | sort -u | while read
 done
 ```
 
-Expected: `OK` for `docs/README.md` only after Task 6 — at this point `docs/README.md` and `docs/sdd-workflow.md` itself may report `MISS`/`OK` respectively. Every path under `docs/specs/` must report `OK`. If any of those is `MISS`, the filename is wrong — fix it before committing.
+**Correction found during Task 3's execution:** the sentence this replaces claimed the expected output would include a `docs/README.md` row. It does not — `docs/sdd-workflow.md`'s content never names `docs/README.md` (that reference lives in Task 4's `CLAUDE.md` content, not this file), so the grep pattern has nothing to match there. Expected: exactly one line, `OK   docs/specs/2026-07-29-foundational-project-spec.md` — the only concrete repo path this file names. The `docs/research/YYYY-MM-DD-<slug>.md`-shaped template paths in the document-types table do not match the pattern (the `<slug>` placeholder's angle bracket breaks the character class before `.md` is reached), so they produce no row at all — this is expected, not a gap. If any row *is* produced and reads `MISS`, the filename is wrong — fix it before committing.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/sdd-workflow.md
