@@ -395,7 +395,7 @@ Currently a **decision document, not an implementation plan**, with seven decisi
 
 Two findings from that document constrain future work regardless of route:
 
-- A POSIX `VAR=value cmd` prefix fails silently on PowerShell, the project's primary shell; the env half must go through `createTerminal({ env })` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L58-L62`).
+- A POSIX `VAR=value cmd` prefix fails silently on PowerShell, VS Code's documented default terminal profile on Windows; the env half must go through `createTerminal({ env })` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L58-L62`).
 - The single-marker `HOOK_MARKER` design (§2.5) breaks if a second hook script is installed globally — partial installs become undetectable, the second script's paths go stale, and it is orphaned on removal (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L72-L80`). This couples any hook-based route to the #68 rework, which is also expected to add a `SessionEnd` hook to the same file (`:L239`).
 
 *unverified:* a prior `project-reviewer` pass over this plan is reported to have returned 2 BLOCKING, 3 CONCERN, and 3 NIT findings. No such findings are recorded in the plan file and I had no GitHub-read tooling to confirm them; treat the counts as unconfirmed and re-check before relying on them.

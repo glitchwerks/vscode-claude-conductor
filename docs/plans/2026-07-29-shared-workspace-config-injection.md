@@ -16,8 +16,8 @@ skills_relevant:
 # Shared workspace-level config injection — scoping plan
 
 **Tracking issue:** [#81 "Spike: shared workspace-level config (CLAUDE.md-equivalent) injected into every session"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/81) — verified open, body fetched 2026-07-29. Issue #81 states its own boundary: *"Out of Scope: Implementation (scoping/planning only)."*
-
-**Status:** DECISION DOCUMENT — not an implementation plan. Seven decision points (D1–D7) require user/expert answers, and a three-probe empirical gate (Phase 0) must return before any mechanism can be recommended as final. No code should be written from this document until Phase 0 returns and D1–D5 are answered.
+**Type:** scoping-decision
+**Status:** UNDER REVIEW — not an implementation plan. Seven decision points (D1–D7) require user/expert answers, and a three-probe empirical gate (Phase 0) must return before any mechanism can be recommended as final. No code should be written from this document until Phase 0 returns, D1–D5 and D7 are answered — D7 is required for every route per NFR5 — and, only if D3 selects a hook route (R3/R4), D6 is answered too; if D3 selects R1/R2, D6 is moot and may remain unresolved.
 
 **Prior inputs consumed (not re-derived):**
 - Prior-art research: `docs/research/2026-07-29-shared-workspace-config-injection.md`
@@ -27,7 +27,7 @@ skills_relevant:
 
 ## 1. The idea, restated
 
-A single shared config — a `CLAUDE.md`-equivalent body of project conventions — should reach **every** Claude Code session that Conductor launches from one VS Code workspace, layered **on top of** (not replacing) whatever `CLAUDE.md` each session's own directory already provides. The intent is that a VS Code workspace becomes a coherent collection of Claude sessions working on different parts of a codebase — different folders, different worktrees, possibly entirely different repos — all sharing one set of conventions.
+A single shared config — a `CLAUDE.md`-equivalent body of project conventions — should reach **every** Claude Code session that Conductor launches from one VS Code workspace, layered **on top of** (not replacing) whatever `CLAUDE.md` each session's own directory already provides. The intent is that a VS Code workspace becomes a coherent collection of Claude sessions working on different parts of a codebase — different folders, different worktrees, possibly entirely different repos — all sharing one set of conventions. (Restated from issue #81's own description — verified open, body fetched 2026-07-29 — and captured verbatim in `docs/research/2026-07-29-shared-workspace-config-injection.md` § Idea.)
 
 Confirming my understanding of the shape: Conductor launches one terminal per folder, each with its own `cwd`, each running an independent `claude` invocation (`src/sessionManager.ts:97-111`). There is no shared process and no shared Claude session to attach config to. Any "shared config" must therefore be applied **N times, once per launched session** — there is no single place to put it once. That is the core constraint the whole design follows from.
 
@@ -43,7 +43,7 @@ Claude Code's documented precedence model has exactly four tiers — managed pol
 
 `_dispatchClaudeCommand()` resolves `const cmd = getClaudeCommand()` at `src/sessionManager.ts:123` and sends that one string down all three paths — shell-integration fast path (`:128`), shell-integration slow path (`:151`), delay-fallback `sendText` (`:165`). `getClaudeCommand()` has exactly one call site (`src/config.ts:10-12`, called only at `src/sessionManager.ts:123`) and `vscode.window.createTerminal` has exactly one call site (`src/sessionManager.ts:97`) — verified by repo-wide grep. Blast radius for the injection itself is one function.
 
-`createTerminal()` currently passes only `name`, `cwd`, `iconPath`, `color` (`src/sessionManager.ts:97-102`) — **no `env` field**. `vscode.TerminalOptions` does support `env?: { [key: string]: string | null | undefined }` (`node_modules/@types/vscode/index.d.ts:12492`, `@types/vscode ^1.93.0` per `package.json:216-217`), so env injection is available but not currently used.
+`createTerminal()` currently passes only `name`, `cwd`, `iconPath`, `color` (`src/sessionManager.ts:97-102`) — **no `env` field**. `vscode.TerminalOptions` does support `env?: { [key: string]: string | null | undefined }` (`node_modules/@types/vscode/index.d.ts:12492`, `@types/vscode@1.115.0` per `package-lock.json:579`, satisfying the `^1.93.0` range at `package.json:216-217`), so env injection is available but not currently used.
 
 ### 2.3 The shell-integration API has an args overload; the fallback path does not
 
@@ -55,9 +55,9 @@ Claude Code's documented precedence model has exactly four tiers — managed pol
 - Blindly appending `--add-dir <path>` produces an argument order the user did not design, and its validity is unverified for non-default values.
 - The `executeCommand(executable, args)` overload (§2.3) is **incompatible** with a user-set `claudeCommand` containing arguments, because using it would require parsing the user's string into executable + args — a shell-parsing problem, not a string-split problem.
 
-### 2.5 Bash-style env-var prefixes will not work on this project's primary shell
+### 2.5 Bash-style env-var prefixes will not work on PowerShell, VS Code's documented Windows default shell
 
-The research doc's headline mechanism is written as `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir ../shared-config` (`docs/research/2026-07-29-shared-workspace-config-injection.md:L39`). That `VAR=value cmd` prefix is POSIX-shell syntax. Conductor sends its command string into **whatever shell the user's VS Code terminal profile launched** — and this project's primary development platform is Windows with PowerShell as the primary shell (per the environment this plan was authored in), where `VAR=value cmd` is not valid syntax and would fail.
+The research doc's headline mechanism is written as `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir ../shared-config` (`docs/research/2026-07-29-shared-workspace-config-injection.md:L39`). That `VAR=value cmd` prefix is POSIX-shell syntax (Bash, Zsh, `sh`); the PowerShell equivalent is the assignment statement `$Env:NAME = 'value'`, not a command prefix (`https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_environment_variables`, fetched 2026-07-31). Conductor sends its command string into **whatever shell the user's VS Code terminal profile launched**, and VS Code's own documentation states the Windows default terminal profile is PowerShell — *"The default terminal profile shell defaults to `$SHELL` on Linux and macOS and PowerShell on Windows"* (`https://code.visualstudio.com/docs/terminal/profiles`, fetched 2026-07-31) — so any user who has not overridden that default hits this failure; `unverified:` whether this project's own contributors have overridden their default profile away from PowerShell.
 
 **This is the single most important implementation finding in this document.** The env-var half of the `--add-dir` mechanism must be delivered via `createTerminal({ env })` (§2.2), **not** as a command-string prefix. A command-string prefix would work on Bash/Zsh terminals and silently fail on PowerShell — a cross-platform correctness bug that would present as "the shared config just doesn't apply," with no error.
 
@@ -196,7 +196,7 @@ Four routes. **None is recommended-final before Phase 0.**
 
 R1 needs a **directory** (`--add-dir`). R2 needs a **file** (`--append-system-prompt-file`). R3/R4 could take either, or inline text. This is not a free choice — it is largely determined by D3, and the setting's shape should not be designed before D3 lands.
 
-Recommended shape once D3 is known: a single string setting holding a path, with `~` expansion consistent with the existing `getExtraFolders()` precedent (`src/config.ts:22-26` already does `f.replace(/^~/, os.homedir())`), and relative paths resolved against the workspace file's directory so a `.code-workspace` can be portable. Do **not** support inline text in the setting body: it makes the config unreviewable in git and unshareable, which defeats the "shared conventions" purpose.
+Recommended shape once D3 is known: a single string setting holding a path, with `~` expansion consistent with the existing `getExtraFolders()` precedent (`src/config.ts:22-26` already does `f.replace(/^~/, os.homedir())`), and relative paths resolved against the workspace base directory (the exact per-scenario definition — saved multi-root, single-folder, and untitled multi-root workspaces, plus the no-workspace skip-and-log case — is worked out in full in § 12 Addendum below, added for issue #86 finding 5) so a `.code-workspace` can be portable where one exists. Do **not** support inline text in the setting body: it makes the config unreviewable in git and unshareable, which defeats the "shared conventions" purpose.
 
 ### D5 — Where is the mechanism applied: terminal environment + arguments, or string append?
 
@@ -240,7 +240,7 @@ Four concrete interactions:
 
 4. **No conflict at the `createTerminal` call site itself.** #33 touches tracking (`_isClaudeSession`, `_trackIfClaudeSession`), not launching. #81 touches launching (`createTerminal` options + dispatch), not tracking. Both can proceed in parallel provided #81 stays out of `ActiveSession`'s shape.
 
-**Recommended sequencing:** run Phase 0 now (it is independent of all three issues). Answer D1–D5. If the answer is R1 or R2 — no hook involvement — #81 can be implemented in parallel with #33 without coordination. If the answer is R3 or R4, **wait for the #68 follow-up design** so `hookInstaller.ts` is reworked once. Regardless of route, prefer the env+args framing so a later #44 "go" does not invalidate the work.
+**Recommended sequencing:** run Phase 0 now (it is independent of all three issues). Answer D1–D5 and D7 (D7 is required for every route per NFR5). If the answer is R1 or R2 — no hook involvement — #81 can be implemented in parallel with #33 without coordination, and D6 stays moot. If the answer is R3 or R4, D6 must also be answered, and the design should **wait for the #68 follow-up design** so `hookInstaller.ts` is reworked once. Regardless of route, prefer the env+args framing so a later #44 "go" does not invalidate the work.
 
 ---
 
@@ -292,10 +292,10 @@ Four concrete interactions:
 
 ## 10. Proposed follow-up issues
 
-I have no GitHub write tools available in this dispatch (`Bash` and `mcp__github__*` are both absent from my tool surface), so **none of these has been created** — they are proposals for the router or the user to file. Recommend grouping them under a new milestone (e.g. `v1.5.0` / "Shared workspace config") per the Issue Tracking convention of creating the milestone at planning time.
+**None of these has been created by this document** — they are proposals only, for the router or the user to file. Recommend grouping them under a new milestone (e.g. `v1.5.0` / "Shared workspace config") per the Issue Tracking convention of creating the milestone at planning time.
 
 1. **"Phase 0: empirically verify CLAUDE.md walk, --add-dir prompting, and effective precedence"** — probes P1/P2/P3 from §3. Label `pathfinding`. **Blocks everything else.** Closes with findings recorded on #81.
-2. **"Implement shared workspace config injection via <route chosen in D3>"** — the build. Blocked by (1) and by answers to D1–D5. `touches` as declared in this document's frontmatter.
+2. **"Implement shared workspace config injection via <route chosen in D3>"** — the build. Blocked by (1) and by answers to D1–D5 and D7 (required for every route per NFR5), plus D6 if D3 selected a hook route (R3/R4). `touches` as declared in this document's frontmatter.
 3. **"Generalize hookInstaller HOOK_MARKER to support multiple hook scripts"** — §2.7. **Only needed if D3 selects R3.** Should be co-designed with the #68 follow-up rather than filed standalone.
 4. **"Document shared-config capability gap for adopted sessions"** — §6.2. A README note; could fold into #33 rather than standing alone.
 
@@ -305,5 +305,29 @@ I have no GitHub write tools available in this dispatch (`Bash` and `mcp__github
 
 - **Unverified by design, deliberately not asserted:** whether Claude Code's `CLAUDE.md` walk crosses a git worktree boundary (P1); whether `--add-dir` prompts per session (P2); the effective precedence of each route's content relative to a per-folder `CLAUDE.md` (P3). Each is a Phase 0 probe rather than an assumption baked into a recommendation.
 - **`unverified:`** the claim that a non-default `claudeCommand` value accepts appended flags in any position. Not probed; K4 and NFR3 exist because of it.
-- **Citation note:** `node_modules/@types/vscode/index.d.ts` citations reference the vendored `@types/vscode ^1.93.0` declared at `package.json:216-217`. It is not a committed file, but it is the authoritative local API surface and is reproducible from `package.json`.
-- **Deliberately not done:** `superpowers:writing-plans` was not invoked and no step-by-step task breakdown exists, because #81 scopes implementation out. The implementation plan belongs to follow-up issue (2), after Phase 0 and D1–D5 land.
+- **Citation note:** `node_modules/@types/vscode/index.d.ts` citations reference the version actually resolved by the lockfile, `@types/vscode@1.115.0` (`package-lock.json:579`, satisfying the `^1.93.0` range declared at `package.json:216-217`) — the lockfile-resolved version, not the semver range, since that is what `npm install` actually places on disk. It is not a committed file, but it is the authoritative local API surface and is reproducible via `npm install`.
+- **Deliberately not done:** `superpowers:writing-plans` was not invoked and no step-by-step task breakdown exists, because #81 scopes implementation out. The implementation plan belongs to follow-up issue (2), after Phase 0 and D1–D5 and D7 land (and D6, if a hook route was selected).
+
+---
+
+## 12. Addendum — D4 workspace-path resolution and test cases (added 2026-07-31, issue #86 finding 5)
+
+This addendum resolves an omission flagged in review: §5 D4's "relative paths resolved against the workspace file's directory" did not define what "the workspace file's directory" means when `vscode.workspace.workspaceFile` is `undefined` — which the API contract says happens "when no workspace is opened" and, when a workspace *is* untitled, returns an `untitled:`-scheme URI rather than a filesystem path (`node_modules/@types/vscode/index.d.ts:13840-13873`, package version `1.115.0` per `package-lock.json:579`). That confirms the untitled-multi-root and no-workspace-at-all rows below directly. The JSDoc alone does not use the words "single-folder window," so `unverified:` that a single opened folder falls under "no workspace is opened" for this specific property rather than under "a workspace is opened" (VS Code's user-facing docs use "workspace" loosely enough to cover a single folder too — `https://code.visualstudio.com/docs/editor/workspaces`, fetched 2026-07-31); community corroboration for the narrower API reading exists (e.g. `eclipse-theia/theia#8994`, a Theia issue observing the same `workspaceFile`-undefined-in-single-folder-mode behavior in a VS Code-API-compatible product, fetched 2026-07-31) but no first-party Microsoft statement was found pinning down this exact case.
+
+**Base-path resolution by scenario:**
+
+| Scenario | `workspaceFile` | Base path for a relative `sharedConfigPath` |
+| --- | --- | --- |
+| Saved multi-root workspace (`.code-workspace` file) | Defined, `file://` scheme | The `.code-workspace` file's own directory — `path.dirname(workspaceFile.fsPath)` |
+| Untitled (unsaved) multi-root workspace | Defined, `untitled:` scheme, **no filesystem path** | Falls back to the first workspace folder — `workspace.workspaceFolders[0].uri.fsPath` — because the `untitled:` URI has no usable `fsPath` |
+| Single-folder window | `undefined` (`unverified:` — see caveat above) | The single opened folder — `workspace.workspaceFolders[0].uri.fsPath` |
+| No folder open at all (empty window) | `undefined`, and `workspace.workspaceFolders` is also `undefined` | No base path exists; skip injection and log — already specified at §5 D2's "no workspace/folder is open at all" case |
+
+**Test cases this table implies** (descriptions, not implementations — this is a planning document; concrete tests belong to the implementation issue in §10, item 2):
+
+1. **Saved multi-root workspace.** Mock `workspace.workspaceFile` as a `file://` URI pointing at a `.code-workspace` path; assert the resolved base directory equals that file's parent directory, and that a relative `sharedConfigPath` value resolves against it correctly, including a path containing spaces (NFR4).
+2. **Untitled multi-root workspace.** Mock `workspace.workspaceFile` as an `untitled:` URI and `workspace.workspaceFolders` with two or more entries; assert the implementation does not attempt to resolve a filesystem path from the `untitled:` URI, and instead falls back to the first workspace folder's path.
+3. **Single-folder window.** Mock `workspace.workspaceFile` as `undefined` and `workspace.workspaceFolders` with exactly one entry; assert the base path resolves to that folder.
+4. **No workspace open.** Mock both `workspace.workspaceFile` and `workspace.workspaceFolders` as `undefined`; assert the injection no-ops, logs at `debugLog` level (consistent with D2 and D7's failure-behaviour table), and does not throw.
+
+This addendum does not change D3's mechanism choice or D6/D7's route-conditional questions — it only fills in the D4 base-path gap flagged by review, consistent with not resolving the underlying design question here.
