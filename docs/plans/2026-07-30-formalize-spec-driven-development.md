@@ -880,7 +880,7 @@ that avoids the tradeoff. Write it properly — plain English labels, not path
 names. Run this task after Task 2: the historical file is gone by then, and
 this index must not carry a dangling row for it.
 
-- [ ] **Step 1: Create the file with this content**
+- [x] **Step 1: Create the file with this content**
 
 ```markdown
 # Documentation index
@@ -923,6 +923,14 @@ Directory: `plans/`
 | [`2026-07-29-shared-workspace-config-injection.md`](plans/2026-07-29-shared-workspace-config-injection.md) | scoping-decision | DRAFT — 7 decision points and a 3-probe empirical gate unanswered; **no code should be written from it yet** | #81 |
 | [`2026-07-30-formalize-spec-driven-development.md`](plans/2026-07-30-formalize-spec-driven-development.md) | implementation-plan | DRAFT | #84 |
 
+The two pre-#84 documents predate the header-line convention in
+[`sdd-workflow.md`](sdd-workflow.md): the shared-workspace plan's own
+`**Status:**` line still reads `DECISION DOCUMENT`, and neither it nor the
+foundational spec carries a `**Type:**` line yet. The Type and Status values
+above are assigned by this index in the current vocabulary; retrofitting the
+header lines is tracked as open question 6 in the SDD formalization plan
+(`docs/plans/2026-07-30-formalize-spec-driven-development.md` § 8).
+
 ## Research — external prior art
 
 Directory: `research/`
@@ -936,7 +944,7 @@ Research is an **input** to a spec, never a decision on its own. A ranked
 shortlist reads like a recommendation and is not one.
 ```
 
-- [ ] **Step 2: Verify every link resolves**
+- [x] **Step 2: Verify every link resolves**
 
 ```bash
 grep -oE '\]\(([A-Za-z0-9._/-]+)\)' docs/README.md | sed -E 's/^\]\((.*)\)$/\1/' | sort -u | while read -r p; do
@@ -946,7 +954,7 @@ done
 
 Expected: all `OK`. Links are relative to `docs/`, hence the `docs/` prefix in the test.
 
-- [ ] **Step 3: Verify the index covers every markdown file under `docs/`**
+- [x] **Step 3: Verify the index covers every markdown file under `docs/`**
 
 No temp files — use process substitution so nothing is written outside the repo:
 
@@ -957,12 +965,38 @@ diff <(find docs -name '*.md' -not -name 'README.md' | sed 's|^docs/||' | sort) 
 
 Expected: no output. A line prefixed `<` is a document present on disk but missing from the index — add it.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/README.md
 git commit -m "docs: add documentation index with type and status per document (#84)"
 ```
+
+**Execution note (Task 6):** both verification steps matched expected output —
+Step 2's link check returned all seven `OK` rows, and Step 3's coverage diff
+was empty (all seven `docs/**/*.md` files, excluding `docs/README.md` itself,
+are indexed). One deviation from the drafted content, confirmed via `advisor`
+before writing: the Plans table's `Status` values (`DRAFT` for both rows) do
+not literally quote either source document's own `**Status:**` line — the
+shared-workspace plan's header still reads `Status: DECISION DOCUMENT`
+(`docs/plans/2026-07-29-shared-workspace-config-injection.md:L20`), a string
+`docs/sdd-workflow.md` § Header lines itself names as an example of conflating
+type and status. Rather than propagate that string into a brand-new index, or
+invent a new resolution to OQ6b mid-task, the committed `docs/README.md` adds
+one footnote paragraph under the Plans table: it discloses that the Type and
+Status values in both spec and plan tables are index-assigned in the current
+vocabulary, that neither pre-#84 document carries a `**Type:**` line yet, and
+that retrofitting those header lines is tracked as open question 6 below. This
+does not resolve OQ6 — it is a same-task disclosure so the index makes no
+unverifiable claim about what a source document's own header line says.
+Separately: OQ6(a) below overstates Task 6 Step 3's check — Step 3 verifies
+only that every `docs/**/*.md` file appears in the index **as a link**, not
+that it carries a `Type` value. The Process documents table (§ Process
+documents) has no `Type`/`Status` columns at all, and Step 3's grep only
+matches `](...)` links — so Task 6 satisfies Step 3 without needing a sixth
+document type for standing process docs. That corrects OQ6(a)'s premise but
+does not close OQ6 itself; the retrofit of missing `**Type:**` lines (OQ6b)
+remains open for whoever executes Task 7 or a follow-up.
 
 ---
 
@@ -1121,7 +1155,7 @@ Use the `clean-gone` skill (hyphen). Do not invoke `commit-commands:clean_gone`.
 3. **Should `AGENTS.md` be added as a pointer to `CLAUDE.md`?** Other agentic tools read `AGENTS.md` rather than `CLAUDE.md`. A two-line pointer file would make the conventions portable across tools at near-zero cost. Not included because #84 names only `CLAUDE.md`, and adding an unasked-for file to the repo root is a decision the maintainer should make.
 4. **Is `superpowers` the right long-term home for these documents at all,** given D1 shows the repo is now shaped around one contributor's harness? The alternative — the harness adapts to the repo — is a change to `~/.claude/agents/project-reviewer.md` and `~/.claude/agents/researcher.md`, outside this repo's control. Worth raising if the repo ever takes outside contributors.
 5. **Should the plan file be deleted after #84 merges,** per the plan-lifecycle convention? Task 4 indexes it in `docs/README.md`, which would become a dangling link on deletion. Recommendation: delete the plan and drop its index row in the same commit, after extracting the D1 rationale — which is already extracted into `docs/sdd-workflow.md` § Why the paths are fixed, so nothing is lost. ⚠️ **Confirmation needed.**
-6. **Gap found during Task 3's execution: the Type/Status vocabulary `docs/sdd-workflow.md` defines has two holes neither Task 4 nor Task 7 currently closes.** (a) The five document types in `docs/sdd-workflow.md` § Document types are all scoped under `docs/{specs,plans,research}/`, but Task 4's `CLAUDE.md` content adds a sixth row — "Standing process document | `docs/<name>.md`" — for files like `docs/release-strategy.md` and `docs/sdd-workflow.md` itself, which `docs/sdd-workflow.md`'s own table does not define a type for. Task 6's index-completeness check (§5, Task 6 Step 3) requires every `docs/**/*.md` file to appear in `docs/README.md` with a type, so both of those files need one. (b) `docs/sdd-workflow.md` § Header lines states `**Type:**` is required on "every spec and plan", but the existing foundational spec (`docs/specs/2026-07-29-foundational-project-spec.md:L14-L18`) and the existing shared-workspace-config-injection plan (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L18-L20`) both carry `**Tracking issue:**` and `**Status:**` but no `**Type:**` line — confirmed by direct read, not inferred. Task 7 is constrained to a strictly same-line substitution and cannot add a line to the foundational spec, so neither existing document in `docs/specs/`/`docs/plans/` currently satisfies the convention `docs/sdd-workflow.md` asserts. This is the same failure mode D4 warns against (a convention violated on day one). Neither gap is fixed by this dispatch — it is out of Task 3's scope and is recorded here for whoever executes Task 4, Task 6, or Task 7 to resolve (either add a sixth document type plus retrofit the two missing `**Type:**` lines as an explicit same-line-safe addendum, or narrow `docs/sdd-workflow.md`'s "both are required" claim to documents created after #84). ⚠️ **Confirmation needed.**
+6. **Gap found during Task 3's execution: the Type/Status vocabulary `docs/sdd-workflow.md` defines has two holes neither Task 4 nor Task 7 currently closes.** (a) The five document types in `docs/sdd-workflow.md` § Document types are all scoped under `docs/{specs,plans,research}/`, but Task 4's `CLAUDE.md` content adds a sixth row — "Standing process document | `docs/<name>.md`" — for files like `docs/release-strategy.md` and `docs/sdd-workflow.md` itself, which `docs/sdd-workflow.md`'s own table does not define a type for. **Correction found during Task 6's execution (confirmed via `advisor`):** the sentence this replaces overstated Task 6 Step 3's check — that step verifies only that every `docs/**/*.md` file appears in `docs/README.md` **as a link**, not that it carries a `Type` value. Task 6's committed index resolves this gap for its own scope without needing a sixth document type: `docs/release-strategy.md` and `docs/sdd-workflow.md` sit in a "Process documents" table with `Document`/`What it covers` columns only, no `Type`/`Status` columns at all. This satisfies Step 3 as written; it does not itself decide whether the five-type vocabulary should grow a sixth entry, which remains open below. (b) `docs/sdd-workflow.md` § Header lines states `**Type:**` is required on "every spec and plan", but the existing foundational spec (`docs/specs/2026-07-29-foundational-project-spec.md:L14-L18`) and the existing shared-workspace-config-injection plan (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L18-L20`) both carry `**Tracking issue:**` and `**Status:**` but no `**Type:**` line — confirmed by direct read, not inferred. Task 7 is constrained to a strictly same-line substitution and cannot add a line to the foundational spec, so neither existing document in `docs/specs/`/`docs/plans/` currently satisfies the convention `docs/sdd-workflow.md` asserts. This is the same failure mode D4 warns against (a convention violated on day one). Neither gap is fixed by this dispatch — it is out of Task 3's scope and is recorded here for whoever executes Task 4, Task 6, or Task 7 to resolve (either add a sixth document type plus retrofit the two missing `**Type:**` lines as an explicit same-line-safe addendum, or narrow `docs/sdd-workflow.md`'s "both are required" claim to documents created after #84). ⚠️ **Confirmation needed.**
 
 ---
 
