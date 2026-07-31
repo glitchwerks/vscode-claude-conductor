@@ -15,6 +15,8 @@ skills_relevant:
 
 **Tracking issue:** [#82 "Author foundational project spec (problem statement + feature list) for Spec-Driven Development"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/82) — verified **open**, label `documentation`, no milestone; body fetched 2026-07-29.
 
+**Type:** foundational-spec
+
 **Status:** DRAFT — awaiting user review.
 
 ## Scope of this document

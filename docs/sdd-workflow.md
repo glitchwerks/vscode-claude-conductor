@@ -36,12 +36,23 @@ Specs and plans share directories with each other by type, not by lifecycle:
 `specs/` holds "what and why", `plans/` holds "which decisions" and "which
 steps". Declare which one a document is in its `**Type:**` line.
 
-**Known gap: standing process documents (`docs/<name>.md`, e.g. this file and
-`docs/release-strategy.md`) have no entry in the table above.** `CLAUDE.md`'s
-own "Where documents live" table names that fourth kind; this document does
-not yet define a matching type value for it. Whether to add a sixth type or
-otherwise close the gap is undecided — tracked in #84 (open, fetched
-2026-07-31).
+**Standing process documents (`docs/<name>.md`, e.g. this file and
+`docs/release-strategy.md`) intentionally have no entry in the table above.**
+`CLAUDE.md`'s own "Where documents live" table names that fourth kind, and
+issue #87 resolved whether to add a sixth type value for it. The answer
+is no: every spec and plan type in the table above is a value that appears in a document's
+`**Type:**` header line, and that header line is part of a larger contract —
+the three-key frontmatter (`touches:`, `skills_relevant:`) plus a
+`**Tracking issue:**` and `**Status:**` line that moves through a lifecycle
+(DRAFT → ACCEPTED, etc.). Process documents carry none of that: no frontmatter,
+no tracked issue driving their content, no draft/accepted lifecycle — they are
+standing references that get updated in place. Adding a sixth type value
+without also requiring the header-line and frontmatter contract behind it
+would be cosmetic; requiring the full contract would force two documents that
+don't have a lifecycle to fake one. `docs/README.md`'s separate "Process
+documents" table (`Document` / `What it covers`, no `Type`/`Status` columns)
+already reflects this distinction correctly and is the resolution, not a
+side-step pending a real answer.
 
 ## Why the paths are fixed
 
@@ -107,18 +118,15 @@ Immediately after the `# Title`, every spec and plan carries:
 changes; status does. Writing only `Status: DECISION DOCUMENT` conflates them and
 leaves the lifecycle state unrecorded.
 
-**One document predates this schema and is known non-conformant.** The
-foundational spec (`docs/specs/2026-07-29-foundational-project-spec.md`)
-carries a `**Tracking issue:**` and a `**Status:**` line but no `**Type:**`
-line — `docs/README.md` assigns it a Type value for indexing purposes without
-editing its header line. Its sibling pre-#84 document, the
+**Both pre-#84 documents have been retrofitted and now conform.** The
 shared-workspace-config-injection plan
-(`docs/plans/2026-07-29-shared-workspace-config-injection.md`), was
-retrofitted with a `**Type:**` line and a valid `**Status:**` value under
-#86 and is no longer part of this gap. Whether to retrofit the foundational
-spec's header line too, narrow this section's "every spec and plan" claim to
-documents created after #84, or leave it permanently grandfathered is an open
-decision, not yet made — tracked in #87 (open, fetched 2026-07-31).
+(`docs/plans/2026-07-29-shared-workspace-config-injection.md`) was retrofitted
+with a `**Type:**` line and a valid `**Status:**` value under #86. Its
+sibling, the foundational spec
+(`docs/specs/2026-07-29-foundational-project-spec.md`), carried a
+`**Tracking issue:**` and a `**Status:**` line but no `**Type:**` line until
+issue #87 added one. No document in this repo predates the header-line schema
+anymore.
 
 If the document consumed prior work, add:
 
