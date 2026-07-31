@@ -828,7 +828,7 @@ git commit -m "docs: add project-level CLAUDE.md enforcing spec-driven developme
 **Interfaces:**
 - Consumes: `docs/sdd-workflow.md` from Task 3.
 
-- [ ] **Step 1: Read the current section**
+- [x] **Step 1: Read the current section**
 
 ```bash
 sed -n '124,145p' README.md
@@ -836,7 +836,7 @@ sed -n '124,145p' README.md
 
 Expected: `## Contributing / Development` at line 124, the `**Releases**` line at 140, `## Source` at 142.
 
-- [ ] **Step 2: Insert a parallel `**Specs**` line immediately before the `**Releases**` line**
+- [x] **Step 2: Insert a parallel `**Specs**` line immediately before the `**Releases**` line**
 
 Add exactly this, followed by a blank line, so it sits above `**Releases**`:
 
@@ -846,7 +846,7 @@ Add exactly this, followed by a blank line, so it sits above `**Releases**`:
 
 Do not restate the spec-required list here; it lives in `CLAUDE.md` and must have exactly one home.
 
-- [ ] **Step 3: Verify placement and that nothing else moved**
+- [x] **Step 3: Verify placement and that nothing else moved**
 
 ```bash
 git diff --stat README.md
@@ -855,12 +855,14 @@ grep -nE '^\*\*(Specs|Releases)\*\*' README.md
 
 Expected: `1 file changed, 2 insertions(+)` and zero deletions. `**Specs**` appears immediately above `**Releases**`. If deletions is non-zero, something was overwritten — revert and redo.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md
 git commit -m "docs: link SDD workflow from README contributing section (#84)"
 ```
+
+**Execution note (Task 5):** verification matched expected output exactly — `README.md:L140` carried `**Releases**` before this edit, the diff showed `1 file changed, 2 insertions(+)` with zero deletions, and both linked paths (`CLAUDE.md`, `docs/sdd-workflow.md`) resolved. No plan-file corrections needed for this task.
 
 ---
 
