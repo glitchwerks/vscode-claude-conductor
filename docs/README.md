@@ -49,10 +49,10 @@ sdd-workflow.md it produced) already lives in this repo. No row remains for it h
 The shared-workspace plan was retrofitted with its own `**Type:**` and a valid
 `**Status:**` value under #86, so it now conforms to the header-line convention
 in [`sdd-workflow.md`](sdd-workflow.md) and its Type/Status values above are
-read directly from its header rather than assigned by this index. Only the
-foundational spec still predates that convention — it carries a
-`**Tracking issue:**` and a `**Status:**` line but no `**Type:**` line yet.
-Retrofitting it is tracked in issue #87.
+read directly from its header rather than assigned by this index. The
+foundational spec (see the Specs table above) was retrofitted with a
+`**Type:**` line the same way under #87, so both pre-#84 documents now conform
+and no document in this repo still predates the header-line convention.
 
 ## Research — external prior art
 
