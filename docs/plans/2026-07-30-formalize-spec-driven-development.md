@@ -32,7 +32,7 @@ skills_relevant:
 
 **Post-Task-2 citation caveat.** Line-number citations into `docs/superpowers/specs/2026-07-29-foundational-project-spec.md` made elsewhere in this plan (§2.2, §3.2, §9) were read before Task 2 (§5) inserts the D3 fold-in content. That insertion shifts every line after the insertion point, so those citations describe the *pre-Task-2* file. They are not re-derived line-by-line throughout this document — re-locate by content (heading or quoted text), not by the stated line number, for anything read after Task 2 has run.
 
-**Repository-owner caveat (added during Task 8 verification, 2026-07-31).** The canonical repo path as of 2026-07-31 is `glitchwerks/vscode-claude-conductor` — verified via `gh api repos/cbeaulieu-gt/vscode-claude-conductor` (2026-07-31), which redirects rather than 404s. `cbeaulieu-gt/vscode-claude-conductor` URLs elsewhere in this document (e.g. the Tracking issue line below, §2's Global Constraints line on the git remote) still resolve through GitHub's redirect and are left as originally written — they are historical citations of what was true when read, not live references that need updating. PR #85 (Task 8 Step 6) was opened against the `glitchwerks` path. Do not edit the `cbeaulieu-gt` citation in the Global Constraints section below (the git-remote evidence there is still substantively true and load-bearing for the "don't name the owner in `CLAUDE.md` prose" rule).
+**Repository-owner caveat (added during Task 8 verification, 2026-07-31).** The canonical repo path as of 2026-07-31 is `glitchwerks/vscode-claude-conductor` — verified via [PR #85](https://github.com/glitchwerks/vscode-claude-conductor/pull/85) (open, fetched 2026-07-31), which is open against that path. `cbeaulieu-gt/vscode-claude-conductor` URLs elsewhere in this document (e.g. the Tracking issue line below, §2's Global Constraints line on the git remote) still resolve through GitHub's redirect and are left as originally written — they are historical citations of what was true when read, not live references that need updating. PR #85 (Task 8 Step 6) was opened against the `glitchwerks` path. Do not edit the `cbeaulieu-gt` citation in the Global Constraints section below (the git-remote evidence there is still substantively true and load-bearing for the "don't name the owner in `CLAUDE.md` prose" rule).
 
 ---
 
@@ -96,7 +96,7 @@ Contributor legibility was the argument for accepting this cost. `docs/README.md
 
 ### D2 — One living spec, or per-feature specs? **DECISION (confirmed 2026-07-31, as recommended): per-feature specs anchored by the foundational spec.**
 
-This resolves `docs/superpowers/specs/2026-07-29-foundational-project-spec.md:L254` (§3, open question 6), which asks the question and does not answer it.
+This resolves `docs/specs/2026-07-29-foundational-project-spec.md` § 3, open question 6 (post-rename path; the question originally asked here without answering it). Task 7 (§5) has since resolved OQ6 in place, locating the line by content grep rather than by number (§3.2).
 
 The foundational spec is already written for the per-feature reading. It calls itself *"the **seed** of the project spec, not the whole spec"* and states that *"Each feature is a future spec's subject, not this one's"* (`docs/superpowers/specs/2026-07-29-foundational-project-spec.md:L22`, `L24`). It was merged in that shape via PR #83 (per #84's issue body, fetched 2026-07-31). Choosing "one living spec" would require restructuring §2 of a document that just landed.
 
@@ -256,7 +256,7 @@ Expected: the count's left number is `0` (local `main` has no commits the remote
 `.worktrees/` is already gitignored (`.gitignore:L4`), so no ignore-rule prep is needed.
 
 ```bash
-git -C I:/ai/claude/vscode-claude-conductor worktree add .worktrees/84-formalize-sdd -b 84-formalize-sdd
+git -C I:/ai/claude/vscode-claude-conductor worktree add .worktrees/84-formalize-spec-driven-development -b 84-formalize-spec-driven-development
 ```
 
 - [ ] **Step 4: Move this plan file into the worktree**
@@ -265,8 +265,8 @@ This plan was written into the main checkout as an untracked file. It must live 
 
 ```bash
 mv I:/ai/claude/vscode-claude-conductor/docs/superpowers/plans/2026-07-30-formalize-spec-driven-development.md \
-   I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-sdd/docs/superpowers/plans/
-git -C I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-sdd status --short
+   I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-spec-driven-development/docs/superpowers/plans/
+git -C I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-spec-driven-development status --short
 ```
 
 Expected: the plan file appears as untracked (`??`) in the worktree, and `git -C I:/ai/claude/vscode-claude-conductor status --short` no longer lists it.
@@ -274,11 +274,11 @@ Expected: the plan file appears as untracked (`??`) in the worktree, and `git -C
 - [ ] **Step 5: Commit the plan**
 
 ```bash
-git -C I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-sdd add docs/superpowers/plans/2026-07-30-formalize-spec-driven-development.md
-git -C I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-sdd commit -m "docs: add SDD formalization plan (#84)"
+git -C I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-spec-driven-development add docs/superpowers/plans/2026-07-30-formalize-spec-driven-development.md
+git -C I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-spec-driven-development commit -m "docs: add SDD formalization plan (#84)"
 ```
 
-**All remaining tasks operate inside `I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-sdd/`.** Paths below are relative to that root.
+**All remaining tasks operate inside `I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-spec-driven-development/`.** Paths below are relative to that root.
 
 ---
 
@@ -1098,12 +1098,12 @@ Expected: no remaining file under `docs/superpowers/`; `docs/specs/2026-04-14-se
 Nothing here touches TypeScript, but run it — a stray edit is cheaper to find now.
 
 ```bash
-npm ci && npm run lint && npm test
+npm ci && npm run lint && npx tsc --noEmit -p tsconfig.test.json && npm test && npm run compile
 ```
 
-Expected: all pass.
+Expected: all four pass.
 
-**Execution note (Step 4):** ran all four CI jobs, not just the two literally named above — Lint (`tsc --noEmit`), Typecheck (`tsc --noEmit -p tsconfig.test.json`), Test (`vitest run`), and Compile (`tsc -p ./`). All four passed clean; Test matched the pre-change baseline exactly at 65/65, no regression. This is a stronger check than the step as originally written specified (it named only `npm run lint && npm test`); recorded here so a future reader knows all four jobs were actually verified, not just two.
+**Execution note (Step 4):** ran all four CI jobs — Lint (`tsc --noEmit`), Typecheck (`tsc --noEmit -p tsconfig.test.json`), Test (`vitest run`), and Compile (`tsc -p ./`) — matching the command above. All four passed clean; Test matched the pre-change baseline exactly at 65/65, no regression.
 
 - [x] **Step 5: Artifact-persistence audit**
 
@@ -1122,10 +1122,10 @@ Cross-check each result against `git ls-files`. A referenced-but-uncommitted fil
 Body must include `Closes #84` so the issue auto-closes on merge, and must end with the Claude attribution line.
 
 ```bash
-git push -u origin 84-formalize-sdd
+git push -u origin 84-formalize-spec-driven-development
 ```
 
-**Execution note (Step 6):** the command as written above names the stale worktree/branch name from Task 0 (`84-formalize-sdd`); the branch actually pushed is `84-formalize-spec-driven-development` (confirmed via `git branch --show-current` in the worktree). Pushed to `origin/84-formalize-spec-driven-development` and opened **PR #85** against `glitchwerks/vscode-claude-conductor` (base `main`) — see the Repository-owner caveat near the top of this document for why the repo path is `glitchwerks/...` rather than the `cbeaulieu-gt/...` used in this plan's own citations. PR body includes `Closes #84` and the Claude attribution line. URL: https://github.com/glitchwerks/vscode-claude-conductor/pull/85
+**Execution note (Step 6):** pushed to `origin/84-formalize-spec-driven-development` (branch confirmed via `git branch --show-current` in the worktree) and opened **PR #85** against `glitchwerks/vscode-claude-conductor` (base `main`) — see the Repository-owner caveat near the top of this document for why the repo path is `glitchwerks/...` rather than the `cbeaulieu-gt/...` used in this plan's own citations. PR body includes `Closes #84` and the Claude attribution line. URL: [PR #85](https://github.com/glitchwerks/vscode-claude-conductor/pull/85)
 
 - [ ] **Step 7: Clean up the worktree after merge**
 

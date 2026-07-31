@@ -61,9 +61,9 @@ live for the same rule stated at always-loaded-context length).
 **A rename fails silently.** There is no error, no warning, and no log line —
 specs and plans under a renamed directory simply stop being reviewed
 automatically. This already happened once: `docs/specs/` and `docs/plans/`
-were `docs/superpowers/specs/` and `docs/superpowers/plans/` before #84, and
-#84 renamed them for contributor legibility — a deliberate, accepted decision
-(D1) that knowingly traded away the automatic-review trigger for
+were `docs/superpowers/specs/` and `docs/superpowers/plans/` before Issue `#84`
+renamed them for contributor legibility — a deliberate, accepted decision (D1)
+that knowingly traded away the automatic-review trigger for
 `project-reviewer` and `architectural-review-for-plans`. Nothing in this repo
 restores that routing. `docs/research/` was **not** renamed (D4), so its
 routing trigger is intact and still fires automatically. **Do not rename these
