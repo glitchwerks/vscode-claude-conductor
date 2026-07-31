@@ -20,8 +20,8 @@ skills_relevant:
 
 **Tracking issue:** [#84 "Formalize Spec-Driven Development: consolidate spec docs, wire CLAUDE.md to enforce SDD workflow"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/84) — verified **open**, no labels, no milestone, opened by `cbeaulieu-gt` on 2026-07-31; body fetched 2026-07-30 from the public issue page.
 
-**Type:** implementation-plan (with a decision-points section, §2; D1–D6 confirmed by the user on 2026-07-31, D7 still outstanding and must be answered before Task 4 starts)
-**Status:** DRAFT — awaiting user review of D7 and of the task sequence below. Decision points D1–D6 in §2 are confirmed; two of them (D1, D3) reverse this plan's original recommendation, and their consequences have been propagated through the rest of this document. D7 remains open.
+**Type:** implementation-plan (with a decision-points section, §2; D1–D7 confirmed by the user on 2026-07-31)
+**Status:** DRAFT — awaiting execution of the task sequence below. Decision points D1–D7 in §2 are confirmed; two of them (D1, D3) reverse this plan's original recommendation, and their consequences have been propagated through the rest of this document.
 
 **Prior inputs consumed (not re-derived):**
 
@@ -66,7 +66,7 @@ AC-1's "and documented" is why this plan produces two files rather than one: the
 
 ## 2. Decision points
 
-Each originally carried a recommendation. **D1–D6 are now confirmed** (user, 2026-07-31); two of them — D1 and D3 — reverse this plan's original recommendation, and their consequences are propagated through §3 onward. **D7 remains open** and must be confirmed before Task 4 (writing `CLAUDE.md`) starts.
+Each originally carried a recommendation. **D1–D7 are now confirmed** (user, 2026-07-31); two of them — D1 and D3 — reverse this plan's original recommendation, and their consequences are propagated through §3 onward.
 
 ### D1 — Where do spec and plan documents live? **DECISION (confirmed 2026-07-31): rename `docs/superpowers/specs/` → `docs/specs/` and `docs/superpowers/plans/` → `docs/plans/`.**
 
@@ -148,7 +148,7 @@ Write the workflow as *what to produce* (a spec with these sections, a plan with
 
 *Note the relationship to D1, updated:* this plan originally argued the **paths** must stay harness-compatible because the harness reads them mechanically, while the **prose** must stay tool-neutral because humans read it. D1 has since been confirmed as a deliberate rename that knowingly severs that harness compatibility (§2.1) — so the first half of that asymmetry no longer holds as a constraint, only as a cost the user chose to pay. The second half is unaffected: D6 is about human-legible prose, which stays tool-neutral regardless of what the harness does with paths. `docs/sdd-workflow.md` should still explain *why* the paths were fixed as of #84's rename, not just assert the new names.
 
-### D7 — What triggers the spec requirement? **Recommendation (needs confirmation): a three-tier trigger.**
+### D7 — What triggers the spec requirement? **DECISION (confirmed 2026-07-31, as recommended): a three-tier trigger.**
 
 An unanswered threshold makes the whole `CLAUDE.md` unenforceable, so this ships with a default rather than as an open question.
 
@@ -162,9 +162,9 @@ An unanswered threshold makes the whole `CLAUDE.md` unenforceable, so this ships
 - a refactor with no behavioural change
 - documentation, test, build, CI, or dependency-only changes
 
-The third "spec required" bullet is deliberately specific to this project rather than generic. Mutating a file the extension does not own is the design property the foundational spec calls out as *"a permanent requirement of this design, not a first-run nicety"* (`docs/superpowers/specs/2026-07-29-foundational-project-spec.md:L74`, citing `src/hookInstaller.ts:L6`, `L244-250`). Changes to that surface deserve a spec even when they look small.
+The third "spec required" bullet is deliberately specific to this project rather than generic. Mutating a file the extension does not own is the design property the foundational spec calls out as *"a permanent requirement of this design, not a first-run nicety"* (`docs/specs/2026-07-29-foundational-project-spec.md:L74`, citing `src/hookInstaller.ts:L6`, `L244-250`). Changes to that surface deserve a spec even when they look small.
 
-⚠️ **Confirmation needed** — this is a process-cost decision. A stricter threshold slows small changes; a looser one lets behaviour drift in unreviewed.
+**The user considered the process-cost tradeoff and confirmed the threshold as recommended anyway**: a stricter threshold slows small changes, a looser one lets behaviour drift in unreviewed, and the three-tier split above is the accepted balance.
 
 ---
 
@@ -642,7 +642,7 @@ git commit -m "docs: define SDD document types, templates, and citation rules (#
 - Consumes: the document-type table, path list, and status vocabulary from `docs/sdd-workflow.md` (Task 3). Link to it; do not restate the templates.
 - Produces: the rule surface. Task 5's README line and Task 6's index both assume `CLAUDE.md` exists at repo root.
 
-**Before starting:** confirm D7's spec-required threshold (§2.7) with the user. Every other decision in §2 has a defensible default; that one sets ongoing process cost.
+**D7 confirmed (§2.7, 2026-07-31, as recommended):** the spec-required threshold used in Step 1's `CLAUDE.md` content below implements that decision; no further confirmation is needed before starting this task.
 
 - [ ] **Step 1: Create the file with this content**
 
