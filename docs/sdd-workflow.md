@@ -39,8 +39,8 @@ steps". Declare which one a document is in its `**Type:**` line.
 **Standing process documents (`docs/<name>.md`, e.g. this file and
 `docs/release-strategy.md`) intentionally have no entry in the table above.**
 `CLAUDE.md`'s own "Where documents live" table names that fourth kind, and
-#87 resolved whether to add a sixth type value for it. The answer
-is no: every type in the table above is a value that appears in a document's
+issue #87 resolved whether to add a sixth type value for it. The answer
+is no: every spec and plan type in the table above is a value that appears in a document's
 `**Type:**` header line, and that header line is part of a larger contract —
 the three-key frontmatter (`touches:`, `skills_relevant:`) plus a
 `**Tracking issue:**` and `**Status:**` line that moves through a lifecycle
@@ -125,7 +125,7 @@ with a `**Type:**` line and a valid `**Status:**` value under #86. Its
 sibling, the foundational spec
 (`docs/specs/2026-07-29-foundational-project-spec.md`), carried a
 `**Tracking issue:**` and a `**Status:**` line but no `**Type:**` line until
-#87 added one. No document in this repo predates the header-line schema
+issue #87 added one. No document in this repo predates the header-line schema
 anymore.
 
 If the document consumed prior work, add:

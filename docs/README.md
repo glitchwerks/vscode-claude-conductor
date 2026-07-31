@@ -52,7 +52,7 @@ in [`sdd-workflow.md`](sdd-workflow.md) and its Type/Status values above are
 read directly from its header rather than assigned by this index. The
 foundational spec (see the Specs table above) was retrofitted with a
 `**Type:**` line the same way under #87, so both pre-#84 documents now conform
-and no document in this repo still predates the header-line convention.
+and no spec or plan in this repo still predates the header-line convention.
 
 ## Research — external prior art
 
