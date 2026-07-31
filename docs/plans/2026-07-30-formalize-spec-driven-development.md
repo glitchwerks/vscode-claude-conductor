@@ -1013,7 +1013,7 @@ remains open for whoever executes Task 7 or a follow-up.
 Resolving the question in a new file would leave the OQ6 line still reading as
 open, so a future reader would re-litigate it.
 
-- [ ] **Step 1: Locate the current line by content, not by line number**
+- [x] **Step 1: Locate the current line by content, not by line number**
 
 Task 2 (D3 fold-in) ran before this task and inserted content earlier in the
 file, so the line that was `:L254` before Task 2 is not `:L254` now. Find it by
@@ -1025,13 +1025,13 @@ grep -n '^6\. \*\*Does "Spec-Driven Development"' docs/specs/2026-07-29-foundati
 
 Expected: exactly one match, a line beginning `6. **Does "Spec-Driven Development" here mean a spec per feature, or one living spec?**`. Note the line number it reports and use that number (not `254`) in Step 2's verification.
 
-- [ ] **Step 2: Replace that single line with this single line**
+- [x] **Step 2: Replace that single line with this single line**
 
 ```markdown
 6. **RESOLVED (#84): per-feature specs anchored by this foundational spec.** ~~Does "Spec-Driven Development" here mean a spec per feature, or one living spec?~~ This document remains the durable foundation; per-feature specs reference it rather than restating it. The convention is documented at `docs/sdd-workflow.md`. No restructure of §2 is needed.
 ```
 
-- [ ] **Step 3: Verify the diff is exactly one line replaced**
+- [x] **Step 3: Verify the diff is exactly one line replaced**
 
 ```bash
 git diff --numstat docs/specs/2026-07-29-foundational-project-spec.md
@@ -1041,7 +1041,7 @@ Expected: `1	1	docs/specs/2026-07-29-foundational-project-spec.md` — one line 
 
 (Do **not** verify this with a `git stash` / `wc -l` / `git stash pop` dance. If the `pop` fails, an unattended executor is left with the edit stranded in the stash and the file reverted. `--numstat` proves the same thing with no mutation.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/specs/2026-07-29-foundational-project-spec.md
