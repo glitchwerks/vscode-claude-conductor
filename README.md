@@ -137,6 +137,8 @@ CI runs lint, typecheck, tests, and compile automatically on every pull request 
 
 Current scope is unit tests only. Integration tests via `@vscode/test-electron` are deferred to a future milestone.
 
+**Specs** — behaviour changes are spec-driven: a written spec lands and is reviewed before implementation. See [CLAUDE.md](CLAUDE.md) for when a spec is required and [docs/sdd-workflow.md](docs/sdd-workflow.md) for the document templates.
+
 **Releases** — this extension follows the VS Code marketplace odd/even minor convention for stable vs pre-release channels. See [docs/release-strategy.md](docs/release-strategy.md).
 
 ## Source

@@ -1,7 +1,7 @@
 ---
 title: Claude Conductor — foundational project spec (problem statement + feature list)
 touches:
-  - docs/superpowers/specs/2026-07-29-foundational-project-spec.md
+  - docs/specs/2026-07-29-foundational-project-spec.md
   - README.md
   - package.json
   - src/hookInstaller.ts
@@ -49,16 +49,16 @@ The user is a **developer running two or more concurrent Claude Code CLI session
 
 Two structural details sharpen the audience:
 
-- **Git worktree users are a first-class case, not an edge case.** The extension carries a dedicated pure module for worktree-aware grouping that buckets `.worktrees/<branch>` children under a synthesised project root (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L67`, citing `src/projectGrouping.ts:89-135`), and the sidebar surfaces this to the user directly (`README.md:L24`).
+- **Git worktree users are a first-class case, not an edge case.** The extension carries a dedicated pure module for worktree-aware grouping that buckets `.worktrees/<branch>` children under a synthesised project root (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L67`, citing `src/projectGrouping.ts:89-135`), and the sidebar surfaces this to the user directly (`README.md:L24`).
 - **The prerequisite is the CLI, not the official extension.** Getting started requires only that *"the `claude` CLI is on your PATH"* (`README.md:L65`), and `package.json` declares no extension dependency on Anthropic's own VS Code extension (`package.json:L1-222` contains no `extensionDependencies` key).
 
 ### 1.3 Why a plain terminal is not enough — the design commitment
 
 The project's answer is to **promote each Claude session from a panel terminal to a first-class editor tab**, so sessions inherit the window-management affordances VS Code already gives code files: *"you can tile them, pin them, and glance at multiple sessions at once like you would with code files"* (`README.md:L32`).
 
-This was a deliberate v1 design decision, not an accident of implementation. The v1 design spec records it as *"Promote terminals to editor tabs... This gives each session visual parity with code files and supports the tab-per-project mental model"* (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md:L16`), implemented via `workbench.action.terminal.moveToEditor` (`src/sessionManager.ts:L108`).
+This was a deliberate v1 design decision, not an accident of implementation. The v1 design spec records it as *"Promote terminals to editor tabs... This gives each session visual parity with code files and supports the tab-per-project mental model"* (§1.6, this document), implemented via `workbench.action.terminal.moveToEditor` (`src/sessionManager.ts:L108`).
 
-The same spec records **why launching must go through a terminal at all**, which is the constraint that gives this project a reason to exist separate from Anthropic's own extension: *"The Claude Code VS Code extension commands (`claude-vscode.editor.open` etc.) don't accept a folder argument — they always scope to the current workspace. Terminal with `cwd` is the only way to target a different folder without switching workspaces"* (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md:L15`).
+The same spec records **why launching must go through a terminal at all**, which is the constraint that gives this project a reason to exist separate from Anthropic's own extension: *"The Claude Code VS Code extension commands (`claude-vscode.editor.open` etc.) don't accept a folder argument — they always scope to the current workspace. Terminal with `cwd` is the only way to target a different folder without switching workspaces"* (§1.6, this document).
 
 That single sentence is the project's foundation. **The official tooling is single-workspace-scoped; the problem is inherently multi-project.** Conductor exists to close that gap.
 
@@ -77,10 +77,186 @@ Two properties of this approach are load-bearing and belong in the problem state
 
 The problem statement is bounded. These are stated limitations of the current product, not unsolved bugs:
 
-- **Single-window scope.** *"Session tracking only works within a single VS Code window (sessions in other windows aren't visible in the sidebar)"* (`README.md:L120`); the v1 spec placed "Multi-window session tracking" out of scope from the start (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md:L171`).
+- **Single-window scope.** *"Session tracking only works within a single VS Code window (sessions in other windows aren't visible in the sidebar)"* (`README.md:L120`); the v1 spec placed "Multi-window session tracking" out of scope from the start (§1.6, this document).
 - **Idle threshold is not tunable.** The notification fires on *"Claude Code's built-in ~60-second idle threshold — not tunable from the extension"* (`README.md:L121`).
 - **No tab-level attention indicator.** *"VS Code terminal tabs cannot change color or flash after creation"*, so attention is signalled via sidebar icons and notifications instead (`README.md:L122`).
-- **No programmatic interaction with sessions.** Sending prompts, or reading conversation history, was placed out of scope in v1 (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md:L168-169`). Conductor orchestrates sessions; it does not talk to them.
+- **No programmatic interaction with sessions.** Sending prompts, or reading conversation history, was placed out of scope in v1 (§1.6, this document). Conductor orchestrates sessions; it does not talk to them.
+
+### 1.6 Historical record: the v1 session-manager design
+
+Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (open, fetched 2026-07-31; decision D3); quoted verbatim, not restated. The original file predated this project's citation and frontmatter conventions and has been deleted — its full content is reproduced below verbatim, apart from a language tag added to one code fence for lint conformance, as a blockquote.
+
+> # Claude Session Manager v1.0 — Design Spec
+>
+> ## Overview
+>
+> A VS Code extension for managing multiple Claude Code CLI sessions across different projects. Each session runs in a terminal promoted to an editor tab, giving users a tab-per-project workflow for monitoring and switching between concurrent Claude sessions.
+>
+> ## Problem
+>
+> The previous version (v0.1) scanned `~/.claude/projects/` and attempted to decode folder names back to real filesystem paths. The encoding is lossy — spaces, dots, and underscores all collapse to hyphens — causing ~70% of folders to fail decoding. The extension needs a reliable folder source and richer session management UX.
+>
+> ## Design Decisions
+>
+> - **Drop `~/.claude/projects` scanning entirely.** The encoding is fundamentally ambiguous and cannot be reliably decoded. No fallback, no partial decode.
+> - **Use VS Code recent folders as the primary folder source.** Accessed via `_workbench.getRecentlyOpened()` internal command. Returns resolved URIs — no decoding needed. Covers virtually all real usage since users open projects in VS Code before launching Claude.
+> - **Keep terminal-based launch.** The Claude Code VS Code extension commands (`claude-vscode.editor.open` etc.) don't accept a folder argument — they always scope to the current workspace. Terminal with `cwd` is the only way to target a different folder without switching workspaces.
+> - **Promote terminals to editor tabs.** Each Claude session opens as an editor tab (via `workbench.action.terminal.moveToEditor`) rather than living in the bottom terminal panel. This gives each session visual parity with code files and supports the tab-per-project mental model.
+>
+> ## Components
+>
+> ### 1. Activity Bar + Sidebar Tree View
+>
+> A dedicated "Claude Sessions" panel registered in the activity bar with a sparkle icon.
+>
+> **Tree structure — two sections:**
+>
+> - **Active Sessions** — currently running Claude terminal tabs
+>   - Each item shows: folder name, running duration, green status indicator
+>   - Click: focus the session's editor tab
+>   - Right-click context menu: Focus, Close
+> - **Recent Projects** — folders from VS Code recents + `extraFolders` config
+>   - Each item shows: folder name, parent directory path
+>   - Click or inline play-button: launch a new session
+>   - Folders that already have an active session are excluded from this section (they appear in Active Sessions instead)
+>
+> **Data flow:**
+> - On activation and on terminal open/close events, refresh both sections
+> - Active sessions detected by matching terminal name pattern `claude · *` or `cwd`
+> - Recent folders fetched from `_workbench.getRecentlyOpened()`, filtered to folders only (exclude workspaces and files)
+>
+> ### 2. Quick-Pick Launcher
+>
+> Keyboard shortcut `Ctrl+Shift+Alt+C` (Mac: `Cmd+Shift+Alt+C`) opens a quick-pick.
+>
+> **Sort order:**
+> 1. Active sessions — marked with terminal icon, selecting focuses existing tab
+> 2. Recent folders — VS Code recency order
+> 3. Extra folders — labeled "configured"
+>
+> **Behavior:**
+> - Selecting an active session focuses its editor tab
+> - Selecting a folder launches a new session (or focuses existing if `reuseExistingTerminal` is on)
+>
+> ### 3. Terminal-as-Editor-Tab Launch
+>
+> When a session is launched:
+>
+> 1. Create a named terminal: `claude · <folder-name>`
+>    - `cwd`: selected folder path
+>    - `iconPath`: sparkle ThemeIcon
+>    - `color`: `terminal.ansiGreen`
+> 2. Move terminal to editor area via `workbench.action.terminal.moveToEditor`
+> 3. Auto-send the configured `claudeCommand` (default: `"claude"`)
+>
+> If `reuseExistingTerminal` is enabled and a terminal matching the folder already exists, just focus it.
+>
+> ### 4. Status Bar
+>
+> A status bar item on the left side:
+>
+> - Shows `⚡ N sessions` when N > 0
+> - Hidden when no active sessions
+> - Click opens the quick-pick launcher
+>
+> Updates reactively on terminal open/close events.
+>
+> ### 5. Active Session Detection
+>
+> Terminals are identified as Claude sessions by:
+> - Name matching pattern `claude · *` (primary — our naming convention)
+> - `creationOptions.cwd` matching a known folder path (fallback)
+>
+> The extension listens to:
+> - `window.onDidOpenTerminal` — add to active sessions
+> - `window.onDidCloseTerminal` — remove from active sessions
+>
+> Limitation: only detects sessions in the current VS Code window.
+>
+> ### 6. Terminal Link Provider
+>
+> Register a `TerminalLinkProvider` that:
+> - Matches file paths in Claude's terminal output (e.g., `src/components/App.tsx`, `C:\Users\chris\project\file.ts`)
+> - On click, opens the file in the editor via `vscode.window.showTextDocument`
+>
+> This makes Claude's file references directly clickable.
+>
+> ### 7. Keyboard Navigation
+>
+> Two additional keybindings:
+> - **Next Claude Session** — cycles forward through Claude terminal tabs only
+> - **Previous Claude Session** — cycles backward
+>
+> Implementation: filter `window.terminals` to those matching the Claude name pattern, maintain an index, and focus the next/previous one.
+>
+> ## Configuration
+>
+> ```json
+> {
+>   "claudeSessions.claudeCommand": {
+>     "type": "string",
+>     "default": "claude",
+>     "description": "The Claude Code CLI command to run"
+>   },
+>   "claudeSessions.reuseExistingTerminal": {
+>     "type": "boolean",
+>     "default": true,
+>     "description": "Focus existing session tab instead of opening a duplicate"
+>   },
+>   "claudeSessions.extraFolders": {
+>     "type": "array",
+>     "items": { "type": "string" },
+>     "default": [],
+>     "description": "Additional folder paths to show in the session launcher"
+>   }
+> }
+> ```
+>
+> **Removed from v0.1:**
+> - `claudeProjectsDir` — no longer scan `~/.claude/projects`
+>
+> **Renamed config prefix** from `claudeFolderSessions` to `claudeSessions` (shorter, reflects the expanded scope).
+>
+> ## Extension Activation
+>
+> - `onStartupFinished` — to populate the sidebar tree view on launch
+> - Terminal event listeners registered immediately to track session lifecycle
+>
+> ## Commands
+>
+> | Command ID | Title | Keybinding |
+> |---|---|---|
+> | `claudeSessions.openSession` | Claude Sessions: Launch Session | `Ctrl+Shift+Alt+C` |
+> | `claudeSessions.addFolder` | Claude Sessions: Add Folder | — |
+> | `claudeSessions.nextSession` | Claude Sessions: Next Session | `Ctrl+Alt+]` |
+> | `claudeSessions.prevSession` | Claude Sessions: Previous Session | `Ctrl+Alt+[` |
+> | `claudeSessions.focusSession` | Claude Sessions: Focus Session | — (tree view click) |
+> | `claudeSessions.closeSession` | Claude Sessions: Close Session | — (context menu) |
+>
+> ## File Structure
+>
+> ```text
+> vscode-claude-sessions/
+> ├── src/
+> │   ├── extension.ts          # Activation, command registration
+> │   ├── sessionManager.ts     # Core session tracking, terminal lifecycle
+> │   ├── folderSource.ts       # VS Code recents + extraFolders fetching
+> │   ├── treeView.ts           # Sidebar tree data provider
+> │   ├── quickPick.ts          # Quick-pick launcher
+> │   ├── statusBar.ts          # Status bar item
+> │   ├── terminalLinks.ts      # Terminal link provider
+> │   └── config.ts             # Configuration helpers
+> ├── package.json
+> ├── tsconfig.json
+> └── .vscodeignore
+> ```
+>
+> ## Out of Scope
+>
+> - Sending prompts or interacting with Claude sessions programmatically
+> - Reading session history or conversation data
+> - Multi-window session tracking
+> - Workspace/multi-root folder support in tree view
 
 ---
 
@@ -116,7 +292,7 @@ All six declared at `package.json:L148-185`.
 | `claudeConductor.claudeCommand` | string, `"claude"` | The CLI command dispatched into the terminal | `package.json:L151-155` |
 | `claudeConductor.reuseExistingTerminal` | boolean, `true` | Focus an existing session instead of opening a duplicate | `package.json:L156-160`, honoured at `src/sessionManager.ts:L88-94` |
 | `claudeConductor.enableNotifications` | boolean, `true` | Show notifications when a session is waiting | `package.json:L161-165` |
-| `claudeConductor.extraFolders` | string[], `[]` | Extra folder paths for the launcher; `~` is expanded | `package.json:L166-173`; expansion per `docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L199` citing `src/config.ts:22-26` |
+| `claudeConductor.extraFolders` | string[], `[]` | Extra folder paths for the launcher; `~` is expanded | `package.json:L166-173`; expansion per `docs/plans/2026-07-29-shared-workspace-config-injection.md:L199` citing `src/config.ts:22-26` |
 | `claudeConductor.launchDelayMs` | number, `500`, min `0` | Delay before `sendText` when shell integration is unavailable | `package.json:L174-179`, consumed at `src/sessionManager.ts:L162-165` |
 | `claudeConductor.debugLogging` | boolean, `false` | Verbose session-lifecycle diagnostics to the output channel | `package.json:L180-184` |
 
@@ -157,9 +333,9 @@ Thirteen TypeScript modules under `src/` plus one standalone hook script.
 | `sessionManager.ts` | Terminal registry and session lifecycle — see below |
 | `hookInstaller.ts` | Install / detect / reconcile / remove Claude Code hooks — see below |
 | `stateWatcher.ts` | Watches `~/.claude/session-state/*.json`, drives idle notifications, and calls `reconcile()` each poll tick (`src/sessionManager.ts:L203-210`) |
-| `folderSource.ts` | Merges VS Code recents with `extraFolders` into a flat `FolderEntry[]` (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L66` citing `src/folderSource.ts:52-92`) |
-| `projectGrouping.ts` | Pure, display-time-only worktree-aware grouping; persists nothing (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L67` citing `src/projectGrouping.ts:89-135`) |
-| `workspaceMatch.ts` | Pure case-insensitive path equality against the current workspace folder (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L68` citing `src/workspaceMatch.ts:16-24`) |
+| `folderSource.ts` | Merges VS Code recents with `extraFolders` into a flat `FolderEntry[]` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L66` citing `src/folderSource.ts:52-92`) |
+| `projectGrouping.ts` | Pure, display-time-only worktree-aware grouping; persists nothing (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L67` citing `src/projectGrouping.ts:89-135`) |
+| `workspaceMatch.ts` | Pure case-insensitive path equality against the current workspace folder (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L68` citing `src/workspaceMatch.ts:16-24`) |
 | `terminalLinks.ts` | Terminal link provider |
 | `treeView.ts` | `ActiveSessionsProvider` and `RecentProjectsProvider` (`src/extension.ts:L111-117`) |
 | `statusBar.ts` | Status-bar item (`src/extension.ts:L120`) |
@@ -201,9 +377,9 @@ D-4 was found while verifying this inventory and is not among the two discrepanc
 
 The current model identifies sessions by a name prefix the extension itself assigned (`src/sessionManager.ts:L9`, `L235-237`) and detects closure through a three-tier fallback plus poll-reconcile (§2.5). The desired end state replaces this with a Conductor-issued stable session ID, a PID-liveness cross-check, and an additional `SessionEnd` hook.
 
-- **[#68](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/68)** (open) — spike into why long-running session tabs fail close-detection when X'd. Phase A diagnostic logging has already landed: `debugLog` calls instrument every close tier, reconcile tick, and PID index write/delete throughout `src/sessionManager.ts:L213-360`, and the `debugLogging` setting that gates them ships in `package.json:L180-184`. Acceptance criteria are logging plus documented findings plus a follow-up issue — explicitly not the fix (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L229`). *unverified:* the commit commonly cited for this work is `960c33b` ("feat: add debug logging for session close-detection diagnostics (#68 phase A)"); this dispatch had no `git` access to confirm the SHA is reachable from `main`, so the shipped code above — not the SHA — is the evidence.
-- **[#33](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/33)** (open, milestone v1.4.0) — adopt externally-launched sessions from the official Claude extension's "Open in Terminal". Proposes an `ActiveSession.source: "owned" | "adopted"` field (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L230`). Name-prefix matching structurally cannot see terminals Conductor did not create and name.
-- **[#44](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/44)** (open) — spike a custom pty / process-wrapper with full lifecycle ownership and in-tab restart (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L231`). This is the highest-leverage and highest-risk item: a "go" removes the shell from the launch path entirely.
+- **[#68](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/68)** (open) — spike into why long-running session tabs fail close-detection when X'd. Phase A diagnostic logging has already landed: `debugLog` calls instrument every close tier, reconcile tick, and PID index write/delete throughout `src/sessionManager.ts:L213-360`, and the `debugLogging` setting that gates them ships in `package.json:L180-184`. Acceptance criteria are logging plus documented findings plus a follow-up issue — explicitly not the fix (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L229`). *unverified:* the commit commonly cited for this work is `960c33b` ("feat: add debug logging for session close-detection diagnostics (#68 phase A)"); this dispatch had no `git` access to confirm the SHA is reachable from `main`, so the shipped code above — not the SHA — is the evidence.
+- **[#33](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/33)** (open, milestone v1.4.0) — adopt externally-launched sessions from the official Claude extension's "Open in Terminal". Proposes an `ActiveSession.source: "owned" | "adopted"` field (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L230`). Name-prefix matching structurally cannot see terminals Conductor did not create and name.
+- **[#44](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/44)** (open) — spike a custom pty / process-wrapper with full lifecycle ownership and in-tab restart (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L231`). This is the highest-leverage and highest-risk item: a "go" removes the shell from the launch path entirely.
 
 Three externally-sourced leads bear directly on this cluster, each verified in the landscape survey:
 
@@ -213,14 +389,14 @@ Three externally-sourced leads bear directly on this cluster, each verified in t
 
 #### 2.7.2 Shared workspace-level config injection — #81
 
-A single shared `CLAUDE.md`-equivalent reaching every Conductor-launched session in a workspace, layered on top of each folder's own `CLAUDE.md` (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L30`).
+A single shared `CLAUDE.md`-equivalent reaching every Conductor-launched session in a workspace, layered on top of each folder's own `CLAUDE.md` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L30`).
 
-Currently a **decision document, not an implementation plan**, with seven decision points D1–D7 and a three-probe empirical Phase 0 gate (P1/P2/P3) that must return before any mechanism is recommended as final (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L20`, `L88-L112`, `L144-L221`). #81's own body scopes implementation out (`:L18`).
+Currently a **decision document, not an implementation plan**, with seven decision points D1–D7 and a three-probe empirical Phase 0 gate (P1/P2/P3) that must return before any mechanism is recommended as final (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L20`, `L88-L112`, `L144-L221`). #81's own body scopes implementation out (`:L18`).
 
 Two findings from that document constrain future work regardless of route:
 
-- A POSIX `VAR=value cmd` prefix fails silently on PowerShell, the project's primary shell; the env half must go through `createTerminal({ env })` (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L58-L62`).
-- The single-marker `HOOK_MARKER` design (§2.5) breaks if a second hook script is installed globally — partial installs become undetectable, the second script's paths go stale, and it is orphaned on removal (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L72-L80`). This couples any hook-based route to the #68 rework, which is also expected to add a `SessionEnd` hook to the same file (`:L239`).
+- A POSIX `VAR=value cmd` prefix fails silently on PowerShell, the project's primary shell; the env half must go through `createTerminal({ env })` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L58-L62`).
+- The single-marker `HOOK_MARKER` design (§2.5) breaks if a second hook script is installed globally — partial installs become undetectable, the second script's paths go stale, and it is orphaned on removal (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L72-L80`). This couples any hook-based route to the #68 rework, which is also expected to add a `SessionEnd` hook to the same file (`:L239`).
 
 *unverified:* a prior `project-reviewer` pass over this plan is reported to have returned 2 BLOCKING, 3 CONCERN, and 3 NIT findings. No such findings are recorded in the plan file and I had no GitHub-read tooling to confirm them; treat the counts as unconfirmed and re-check before relying on them.
 
@@ -251,7 +427,7 @@ These were not in the original inventory but are open issues verified on 2026-07
 3. **How should D-1 be resolved — in which direction?** Lowering the manifest floor to 1.85 and raising the README to 1.93 are both "fixes," but they are opposite product decisions. The `1.93` floor is what makes the shell-integration fast path available (`src/sessionManager.ts:L126-130`; shell integration is stable since 1.93 per `docs/research/2026-07-29-vscode-claude-conductor-landscape-survey.md:L129`), which argues for correcting the README rather than the manifest. **⚠️ Confirmation needed** — this is a compatibility decision, not a doc typo.
 4. **Should the roadmap in §2.7 be ranked?** It is currently grouped by theme, not priority. #82 does not ask for sequencing, but every item there eventually needs an order, and #44's outcome dominates the sequencing of §2.7.1 and §2.7.2 both.
 5. **Is PR #77 intended to merge as-is, or be superseded?** It is open and unmerged while #78 and #79 describe defects on the surface it introduces. Whether those are fixed inside #77 or after it changes what §2.7.3 should say.
-6. **Does "Spec-Driven Development" here mean a spec per feature, or one living spec?** This document is written as a durable foundation that per-feature specs reference. If the intent is instead a single growing document, §2 should be restructured before follow-on specs are written against it.
+6. **RESOLVED (#84, open, fetched 2026-07-31): per-feature specs anchored by this foundational spec.** ~~Does "Spec-Driven Development" here mean a spec per feature, or one living spec?~~ This document remains the durable foundation; per-feature specs reference it rather than restating it. The convention is documented at `docs/sdd-workflow.md`. No restructure of §2 is needed.
 7. **Should the unverified `project-reviewer` findings on #81 (§2.7.2) be re-obtained** before the shared-config work resumes?
 
 ---
