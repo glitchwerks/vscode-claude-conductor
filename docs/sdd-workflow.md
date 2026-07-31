@@ -10,7 +10,7 @@ them by hand.
 
 ## The pipeline
 
-```
+```text
 research  →  scoping decision  →  spec  →  implementation plan  →  code
 (optional)   (optional)           (required for behaviour changes)
 ```
@@ -38,22 +38,26 @@ steps". Declare which one a document is in its `**Type:**` line.
 
 ## Why the paths are fixed
 
-`docs/specs/`, `docs/plans/`, and `docs/research/` are not cosmetic. They are
-path-glob routing triggers for the maintainer's agent harness — a spec written
-under one of those paths is automatically routed to architectural review; one
-written elsewhere is not.
+`docs/specs/`, `docs/plans/`, and `docs/research/` are not cosmetic. All three
+are path-glob routing triggers for the maintainer's agent harness, but as of
+#84 (D1) they no longer behave identically: **only `docs/research/` still
+auto-routes** to architectural review today. A document under `docs/specs/`
+or `docs/plans/` does not auto-route — a contributor who wants `project-reviewer`
+or `architectural-review-for-plans` on a new spec or plan must invoke it
+explicitly (see `CLAUDE.md` § Where documents live for the same rule stated at
+always-loaded-context length).
 
 **A rename fails silently.** There is no error, no warning, and no log line —
 specs and plans under a renamed directory simply stop being reviewed
-automatically. This already happened once: these two directories were
-`docs/superpowers/specs/` and `docs/superpowers/plans/` before #84, and #84
-renamed them for contributor legibility — a deliberate, accepted decision (D1)
-that knowingly traded away the automatic-review trigger for `project-reviewer`
-and `architectural-review-for-plans`. Nothing in this repo restores that
-routing; a contributor who wants architectural review on a new spec or plan
-must request it explicitly. `docs/research/` was **not** renamed (D4) and its
-routing trigger is intact. **Do not rename these paths again** — the cost was
-paid once, on purpose; paying it twice buys nothing.
+automatically. This already happened once: `docs/specs/` and `docs/plans/`
+were `docs/superpowers/specs/` and `docs/superpowers/plans/` before #84, and
+#84 renamed them for contributor legibility — a deliberate, accepted decision
+(D1) that knowingly traded away the automatic-review trigger for
+`project-reviewer` and `architectural-review-for-plans`. Nothing in this repo
+restores that routing. `docs/research/` was **not** renamed (D4), so its
+routing trigger is intact and still fires automatically. **Do not rename these
+paths again** — the cost was paid once, on purpose; paying it twice buys
+nothing.
 
 ## Frontmatter contract
 
@@ -91,6 +95,17 @@ Immediately after the `# Title`, every spec and plan carries:
 **Type and status are different things** and both are required. Type never
 changes; status does. Writing only `Status: DECISION DOCUMENT` conflates them and
 leaves the lifecycle state unrecorded.
+
+**Two documents predate this schema and are known non-conformant.** The
+foundational spec (`docs/specs/2026-07-29-foundational-project-spec.md`) and
+the shared-workspace-config-injection plan
+(`docs/plans/2026-07-29-shared-workspace-config-injection.md`) each carry a
+`**Tracking issue:**` and a `**Status:**` line but no `**Type:**` line —
+`docs/README.md` assigns them Type and Status values for indexing purposes
+without editing their header lines. Whether to retrofit the header lines into
+those two documents, narrow this section's "every spec and plan" claim to
+documents created after #84, or leave them permanently grandfathered is an
+open decision, not yet made — tracked in #84 (open, fetched 2026-07-31).
 
 If the document consumed prior work, add:
 
@@ -134,8 +149,8 @@ consequences of each, and a recommendation. An `implementation-plan` adds a
 
 ## Citing sources
 
-Every factual or judgement claim that drives a decision must cite a verifiable
-source, inline, at the point of the claim.
+Every factual or judgement claim in a spec, plan, or research document must
+cite a verifiable source, inline, at the point of the claim.
 
 | Claim about | Cite as | Verify by |
 |---|---|---|

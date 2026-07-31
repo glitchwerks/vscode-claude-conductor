@@ -5,10 +5,10 @@ touches:
   - docs/sdd-workflow.md
   - docs/README.md
   - README.md
-  - docs/superpowers/specs/2026-07-29-foundational-project-spec.md (renamed to docs/specs/, D1; content modified — D3 fold-in + OQ6 resolution)
-  - docs/superpowers/specs/2026-04-14-session-manager-v1-design.md (deleted — D3; content folded into the foundational spec above)
-  - docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md (renamed to docs/plans/, D1; no content change)
-  - docs/superpowers/plans/2026-07-30-formalize-spec-driven-development.md (this file; renamed to docs/plans/, D1)
+  - docs/specs/2026-07-29-foundational-project-spec.md (post-rename path; renamed from docs/superpowers/specs/, D1; content modified — D3 fold-in + OQ6 resolution)
+  - docs/specs/2026-04-14-session-manager-v1-design.md (post-rename path; was docs/superpowers/specs/ pre-rename; deleted — D3; content folded into the foundational spec above)
+  - docs/plans/2026-07-29-shared-workspace-config-injection.md (post-rename path; renamed from docs/superpowers/plans/, D1; no content change)
+  - docs/plans/2026-07-30-formalize-spec-driven-development.md (post-rename path; this file; renamed from docs/superpowers/plans/, D1)
 skills_relevant:
   - agent-authoring
   - simplicity-first
@@ -18,7 +18,7 @@ skills_relevant:
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Tracking issue:** [#84 "Formalize Spec-Driven Development: consolidate spec docs, wire CLAUDE.md to enforce SDD workflow"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/84) — verified **open**, no labels, no milestone, opened by `cbeaulieu-gt` on 2026-07-31; body fetched 2026-07-30 from the public issue page.
+**Tracking issue:** [#84 "Formalize Spec-Driven Development: consolidate spec docs, wire CLAUDE.md to enforce SDD workflow"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/84) — verified **open**, no labels, no milestone, opened by `cbeaulieu-gt` on 2026-07-31; body fetched 2026-07-31 from the public issue page.
 
 **Type:** implementation-plan (with a decision-points section, §2; D1–D7 confirmed by the user on 2026-07-31)
 **Status:** DRAFT — awaiting execution of the task sequence below. Decision points D1–D7 in §2 are confirmed; two of them (D1, D3) reverse this plan's original recommendation, and their consequences have been propagated through the rest of this document.
@@ -56,7 +56,7 @@ skills_relevant:
 
 ## 1. What #84 actually asks for
 
-#84's acceptance criteria are three (issue body, fetched 2026-07-30):
+Issue `#84`'s acceptance criteria are three (issue body, fetched 2026-07-31):
 
 1. Formalized spec document structure decided **and documented**
 2. Existing spec/plan docs migrated **or consolidated**
@@ -98,7 +98,7 @@ Contributor legibility was the argument for accepting this cost. `docs/README.md
 
 This resolves `docs/superpowers/specs/2026-07-29-foundational-project-spec.md:L254` (§3, open question 6), which asks the question and does not answer it.
 
-The foundational spec is already written for the per-feature reading. It calls itself *"the **seed** of the project spec, not the whole spec"* and states that *"Each feature is a future spec's subject, not this one's"* (`docs/superpowers/specs/2026-07-29-foundational-project-spec.md:L22`, `L24`). It was merged in that shape via PR #83 (per #84's issue body, fetched 2026-07-30). Choosing "one living spec" would require restructuring §2 of a document that just landed.
+The foundational spec is already written for the per-feature reading. It calls itself *"the **seed** of the project spec, not the whole spec"* and states that *"Each feature is a future spec's subject, not this one's"* (`docs/superpowers/specs/2026-07-29-foundational-project-spec.md:L22`, `L24`). It was merged in that shape via PR #83 (per #84's issue body, fetched 2026-07-31). Choosing "one living spec" would require restructuring §2 of a document that just landed.
 
 Two structural arguments beyond precedent:
 
@@ -228,6 +228,12 @@ CI runs four separate jobs — Lint (`npm run lint`), Typecheck (`npx tsc --noEm
 
 **Files:** none (git state only)
 
+**Note on paths below:** `I:/ai/claude/vscode-claude-conductor` is the
+maintainer's checkout root for this specific execution — it is machine-local,
+not a repo convention. A different contributor substitutes their own checkout
+root (e.g. `$(git rev-parse --show-toplevel)`) wherever it appears in this
+task's commands.
+
 - [ ] **Step 1: Confirm you are not about to commit to `main`**
 
 ```bash
@@ -349,7 +355,7 @@ Copy these lines verbatim into the new subsection in Step 2 — do not retype fr
 
 - [x] **Step 2: Insert a new subsection into the foundational spec**
 
-Added `### 1.6 Historical record: the v1 session-manager design` immediately after §1.5 ("Acknowledged boundaries of the problem being solved"), containing a one-sentence frame ("Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (D3); quoted verbatim, not restated") followed by the **entire** original file, verbatim, as a `> `-prefixed blockquote (see Step 1's note on why the scope widened from "the four passages" to "the whole file"). Verified byte-identical to `git show HEAD:docs/specs/2026-04-14-session-manager-v1-design.md` (pre-deletion) via a scripted diff, not eyeballing — the file contains em-dashes, `·`, `⚡`, and box-drawing characters that a visual verbatim check would not reliably catch.
+Added `### 1.6 Historical record: the v1 session-manager design` immediately after §1.5 ("Acknowledged boundaries of the problem being solved"), containing a one-sentence frame ("Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (D3); quoted verbatim, not restated") followed by the **entire** original file, verbatim, as a `>`-prefixed blockquote (Markdown blockquote syntax — each line begins with `>` followed by a space; see Step 1's note on why the scope widened from "the four passages" to "the whole file"). Verified byte-identical to `git show HEAD:docs/specs/2026-04-14-session-manager-v1-design.md` (pre-deletion) via a scripted diff, not eyeballing — the file contains em-dashes, `·`, `⚡`, and box-drawing characters that a visual verbatim check would not reliably catch.
 
 - [x] **Step 3: Rewrite the four citing lines to the new heading anchor**
 
@@ -648,7 +654,7 @@ git commit -m "docs: define SDD document types, templates, and citation rules (#
 
 - [x] **Step 1: Create the file with this content**
 
-```markdown
+````markdown
 # Claude Conductor — project conventions
 
 A VS Code extension that orchestrates multiple Claude Code CLI sessions as editor
@@ -773,7 +779,7 @@ If you have the `superpowers` plugin installed, `superpowers:brainstorming` help
 shape a vague idea before the spec, and `superpowers:writing-plans` turns an
 accepted spec into an implementation plan. Neither is required — the workflow in
 `docs/sdd-workflow.md` is tool-neutral.
-```
+````
 
 - [x] **Step 2: Verify no machine-local paths or import directives leaked in**
 

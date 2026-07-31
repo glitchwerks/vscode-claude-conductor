@@ -84,7 +84,7 @@ The problem statement is bounded. These are stated limitations of the current pr
 
 ### 1.6 Historical record: the v1 session-manager design
 
-Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (D3); quoted verbatim, not restated. The original file predated this project's citation and frontmatter conventions and has been deleted — its full content is reproduced below, unedited, as a blockquote.
+Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (open, fetched 2026-07-31; decision D3); quoted verbatim, not restated. The original file predated this project's citation and frontmatter conventions and has been deleted — its full content is reproduced below verbatim, apart from a language tag added to one code fence for lint conformance, as a blockquote.
 
 > # Claude Session Manager v1.0 — Design Spec
 >
@@ -235,7 +235,7 @@ Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (D3); quoted ve
 >
 > ## File Structure
 >
-> ```
+> ```text
 > vscode-claude-sessions/
 > ├── src/
 > │   ├── extension.ts          # Activation, command registration
@@ -427,7 +427,7 @@ These were not in the original inventory but are open issues verified on 2026-07
 3. **How should D-1 be resolved — in which direction?** Lowering the manifest floor to 1.85 and raising the README to 1.93 are both "fixes," but they are opposite product decisions. The `1.93` floor is what makes the shell-integration fast path available (`src/sessionManager.ts:L126-130`; shell integration is stable since 1.93 per `docs/research/2026-07-29-vscode-claude-conductor-landscape-survey.md:L129`), which argues for correcting the README rather than the manifest. **⚠️ Confirmation needed** — this is a compatibility decision, not a doc typo.
 4. **Should the roadmap in §2.7 be ranked?** It is currently grouped by theme, not priority. #82 does not ask for sequencing, but every item there eventually needs an order, and #44's outcome dominates the sequencing of §2.7.1 and §2.7.2 both.
 5. **Is PR #77 intended to merge as-is, or be superseded?** It is open and unmerged while #78 and #79 describe defects on the surface it introduces. Whether those are fixed inside #77 or after it changes what §2.7.3 should say.
-6. **RESOLVED (#84): per-feature specs anchored by this foundational spec.** ~~Does "Spec-Driven Development" here mean a spec per feature, or one living spec?~~ This document remains the durable foundation; per-feature specs reference it rather than restating it. The convention is documented at `docs/sdd-workflow.md`. No restructure of §2 is needed.
+6. **RESOLVED (#84, open, fetched 2026-07-31): per-feature specs anchored by this foundational spec.** ~~Does "Spec-Driven Development" here mean a spec per feature, or one living spec?~~ This document remains the durable foundation; per-feature specs reference it rather than restating it. The convention is documented at `docs/sdd-workflow.md`. No restructure of §2 is needed.
 7. **Should the unverified `project-reviewer` findings on #81 (§2.7.2) be re-obtained** before the shared-config work resumes?
 
 ---
