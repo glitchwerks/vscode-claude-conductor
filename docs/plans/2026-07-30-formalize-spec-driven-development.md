@@ -111,6 +111,8 @@ It predates the current convention: no frontmatter, no citations, plain narrativ
 
 **The original recommendation was the opposite** — leave the file byte-identical and record its status in `docs/README.md` — because the foundational spec cites this file by line number at four places (`docs/superpowers/specs/2026-07-29-foundational-project-spec.md:L59`, `L61`, `L80`, `L83`, pointing at `:L15`, `:L16`, `:L168-169`, and `:L171`), and prepending or reformatting the historical file would shift every one of those citations silently — they would still *look* valid and now point at the wrong text, worse than a broken link. Reformatting the body to add citations was judged worse still: the file is a *record of what was decided in April*, and retrofitting present-day evidence onto a historical decision misrepresents what was known at the time.
 
+**Correction found during Task 2's execution:** the `:L171` citation above was already off by one before this plan was written — the phrase it backs ("Multi-window session tracking") sits at the historical file's `:L170`; `:L171` is the next bullet ("Workspace/multi-root folder support in tree view"). This is a pre-existing citation bug in the foundational spec (not introduced by this plan), and it is exactly the silent-drift failure mode D3 is choosing to resolve rather than merely protect against. Task 2's fold-in carries both bullets into §1.6 regardless, so the wrong-line-number citation is moot once the citing line is rewritten to a heading anchor instead of a line number.
+
 **The user considered that reasoning and rejected the recommendation anyway**, choosing integration over exemption and accepting the one-time citation-rewrite cost as a deliberate migration rather than a permanent exemption.
 
 **New task requirement this decision adds (Task 2, §5):** whoever executes this plan must, in one commit:
@@ -333,7 +335,7 @@ git commit -m "docs: rename docs/superpowers/{specs,plans} to docs/{specs,plans}
 
 This is the task the Global Constraints' verbatim-quote rule governs: the four passages being folded in must be copied character-for-character, not paraphrased.
 
-- [ ] **Step 1: Read the exact passages being folded in, before touching anything**
+- [x] **Step 1: Read the exact passages being folded in, before touching anything**
 
 ```bash
 sed -n '15,17p;168,171p' docs/specs/2026-04-14-session-manager-v1-design.md
@@ -341,39 +343,39 @@ sed -n '15,17p;168,171p' docs/specs/2026-04-14-session-manager-v1-design.md
 
 Copy these lines verbatim into the new subsection in Step 2 — do not retype from memory or summarize.
 
-- [ ] **Step 2: Insert a new subsection into the foundational spec**
+**Bug found during execution, resolved by widening scope rather than narrowing it:** the sed range above spans two of the four citing lines' targets (`:L15`, `:L16`) plus a *superset* of the other two (`:L168-169`, `:L171` — but `:L171`'s cited phrase, "Multi-window session tracking," actually lives at `:L170`; see the D3 correction note in §2 and the off-by-one this step's own range happens to route around by grabbing 168-171 as one block). Reading Step 1's range in isolation and this step's phrasing ("the verbatim passages") both under-specify what "content" means relative to D3(a)'s "fold its content in" and the file-structure table's "absorbs the historical content" framing. Resolved (confirmed via `advisor`): fold in the **entire** historical file, verbatim, as a blockquote — not just the four cited passages — so the delete-after-fold in Step 4 is lossless per this project's own extract-before-deletion standard, and so the off-by-one above is moot rather than silently perpetuated in a partial quote.
 
-Add a new `### 1.6 Historical record: the v1 session-manager design` subsection immediately after §1.5 ("Acknowledged boundaries of the problem being solved"), containing: a one-sentence frame ("Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (D3); quoted verbatim, not restated"), then the verbatim passages read in Step 1, each still attributed as a v1-era decision.
+- [x] **Step 2: Insert a new subsection into the foundational spec**
 
-- [ ] **Step 3: Rewrite the four citing lines to the new heading anchor**
+Added `### 1.6 Historical record: the v1 session-manager design` immediately after §1.5 ("Acknowledged boundaries of the problem being solved"), containing a one-sentence frame ("Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (D3); quoted verbatim, not restated") followed by the **entire** original file, verbatim, as a `> `-prefixed blockquote (see Step 1's note on why the scope widened from "the four passages" to "the whole file"). Verified byte-identical to `git show HEAD:docs/specs/2026-04-14-session-manager-v1-design.md` (pre-deletion) via a scripted diff, not eyeballing — the file contains em-dashes, `·`, `⚡`, and box-drawing characters that a visual verbatim check would not reliably catch.
 
-Locate the four lines that currently cite the historical file by path and line number (originally `:L59`, `:L61`, `:L80`, `:L83`, now shifted — locate by the quoted text, not the old line numbers) and replace each `docs/specs/2026-04-14-session-manager-v1-design.md:L##` citation with `§1.6, this document`. Do **not** cite the new location by line number — that would recreate the same fragility against the same file citing itself.
+- [x] **Step 3: Rewrite the four citing lines to the new heading anchor**
 
-- [ ] **Step 4: Delete the original file**
+Located the four lines that cited the historical file by path and line number (`:L59`, `:L61`, `:L80`, `:L83`, still on the pre-rename `docs/superpowers/specs/...` path per Task 1's deliberate exemption) and replaced each `docs/superpowers/specs/2026-04-14-session-manager-v1-design.md:L##` citation with `§1.6, this document`. Did not cite the new location by line number.
+
+- [x] **Step 4: Delete the original file**
 
 ```bash
 git rm docs/specs/2026-04-14-session-manager-v1-design.md
 ```
 
-- [ ] **Step 5: Verify no other file in the repo still cites the deleted file by line number**
-
-Re-run the recon grep from §3.2, rescoped to the post-rename filename:
+- [x] **Step 5: Verify no other file in the repo still cites the deleted file by line number**
 
 ```bash
-git grep -n 'session-manager-v1-design'
+git grep -nE 'session-manager-v1-design\.md:L' -- ':!docs/plans/2026-07-30-formalize-spec-driven-development.md'
 ```
 
-Expected: hits only inside the foundational spec's new §1.6 (self-reference to the fold-in) and this plan file's historical narrative. No hit anywhere still carrying a `:L##` citation into the now-deleted file.
+Empty output (the discriminating gate — the bare-basename form of this grep always hits this plan's historical narrative and §1.6's frame sentence, so it cannot be the pass condition by itself). Confirmed clean.
 
-- [ ] **Step 6: Verify the diff shows a genuine insertion, not a same-line substitution**
+- [x] **Step 6: Verify the diff shows a genuine insertion, not a same-line substitution**
 
 ```bash
 git diff --numstat docs/specs/2026-07-29-foundational-project-spec.md
 ```
 
-Expected: insertions well in excess of deletions (the fold-in adds a subsection). This is deliberately **not** the same-line-substitution discipline Task 7 uses — nothing else in the repo cites this file by line today (§3.2), so a larger insertion here is safe.
+Result: 180 insertions, 4 deletions. Well in excess — the fold-in adds the full historical file as a blockquote. This is deliberately **not** the same-line-substitution discipline Task 7 uses — nothing else in the repo cites this file by line today (§3.2), so a larger insertion here is safe.
 
-- [ ] **Step 7: Commit the fold-in and the deletion together**
+- [x] **Step 7: Commit the fold-in and the deletion together**
 
 ```bash
 git add -A
