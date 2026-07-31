@@ -32,6 +32,8 @@ skills_relevant:
 
 **Post-Task-2 citation caveat.** Line-number citations into `docs/superpowers/specs/2026-07-29-foundational-project-spec.md` made elsewhere in this plan (§2.2, §3.2, §9) were read before Task 2 (§5) inserts the D3 fold-in content. That insertion shifts every line after the insertion point, so those citations describe the *pre-Task-2* file. They are not re-derived line-by-line throughout this document — re-locate by content (heading or quoted text), not by the stated line number, for anything read after Task 2 has run.
 
+**Repository-owner caveat (added during Task 8 verification, 2026-07-31).** The canonical repo path as of 2026-07-31 is `glitchwerks/vscode-claude-conductor` — verified via `gh api repos/cbeaulieu-gt/vscode-claude-conductor` (2026-07-31), which redirects rather than 404s. `cbeaulieu-gt/vscode-claude-conductor` URLs elsewhere in this document (e.g. the Tracking issue line below, §2's Global Constraints line on the git remote) still resolve through GitHub's redirect and are left as originally written — they are historical citations of what was true when read, not live references that need updating. PR #85 (Task 8 Step 6) was opened against the `glitchwerks` path. Do not edit the `cbeaulieu-gt` citation in the Global Constraints section below (the git-remote evidence there is still substantively true and load-bearing for the "don't name the owner in `CLAUDE.md` prose" rule).
+
 ---
 
 **Goal:** Make Spec-Driven Development an enforced, contributor-legible convention in this repo by adding a project-level `CLAUDE.md`, a `docs/sdd-workflow.md` conventions document, and a `docs/README.md` index — and, per the confirmed D1/D3 decisions, by renaming `docs/superpowers/{specs,plans}/` to `docs/{specs,plans}/` and folding the historical `2026-04-14-session-manager-v1-design.md` into the foundational spec.
@@ -1054,7 +1056,7 @@ git commit -m "docs: resolve foundational spec OQ6 — per-feature specs (#84)"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Confirm `src/` is untouched**
+- [x] **Step 1: Confirm `src/` is untouched**
 
 ```bash
 git diff --stat main...HEAD -- src/
@@ -1062,16 +1064,20 @@ git diff --stat main...HEAD -- src/
 
 Expected: no output. Any output means a Global Constraint was violated.
 
-- [ ] **Step 2: Confirm the historical file no longer exists and no stray citation into it survives**
+**Execution note (Step 1):** confirmed — `git diff --stat main...HEAD -- src/` produced no output.
+
+- [x] **Step 2: Confirm the historical file no longer exists and no stray citation into it survives**
 
 ```bash
 test ! -e docs/specs/2026-04-14-session-manager-v1-design.md && echo "DELETED as expected"
-git grep -n 'session-manager-v1-design'
+git grep -nE 'session-manager-v1-design\.md:L' -- ':!docs/plans/2026-07-30-formalize-spec-driven-development.md'
 ```
 
-Expected: `DELETED as expected`, and the grep's only hits are the foundational spec's own § 1.6 self-reference and this plan file's historical narrative — no other file, and no hit anywhere carrying a `:L##` citation into the deleted path.
+Expected: `DELETED as expected`, and the scoped grep (matching only a `:L##` citation into the deleted path, excluding this plan's own historical narrative) returns empty. The bare-basename form of this grep (`git grep -n 'session-manager-v1-design'`) is **not** the pass condition by itself — per Task 2 Step 5's framing (§5, line ~368), it always additionally hits the foundational spec's own § 1.6 self-reference and this plan file's historical narrative, and, as of Tasks 3 and 6, also `docs/sdd-workflow.md` and `docs/README.md`'s prose mentions (both added after this step's original text was written). None of those carry a live `:L##` citation into the deleted path, so the invariant that actually matters — no surviving line-number citation into a file that no longer exists — is the scoped grep above, not a fixed count of expected bare-basename hits.
 
-- [ ] **Step 3: Confirm the full change set**
+**Execution note (Step 2):** confirmed — the file is deleted, and the scoped grep returned zero matches. The original "Expected" text (a fixed list of two acceptable bare-basename hits) was stale the moment Tasks 3 and 6 landed, since both add their own prose mentions of the historical filename; the text above replaces it with the actual invariant being checked.
+
+- [x] **Step 3: Confirm the full change set**
 
 ```bash
 git diff --stat main...HEAD
@@ -1079,7 +1085,9 @@ git diff --stat main...HEAD
 
 Expected: no remaining file under `docs/superpowers/`; `docs/specs/2026-04-14-session-manager-v1-design.md` shows as deleted; `docs/specs/2026-07-29-foundational-project-spec.md` and `docs/plans/2026-07-29-shared-workspace-config-injection.md` and `docs/plans/2026-07-30-formalize-spec-driven-development.md` (this file) show as renames from their `docs/superpowers/` originals, with the foundational spec additionally showing content changes (Task 2's fold-in, Task 7's OQ6 resolution); plus three new files (`CLAUDE.md`, `docs/sdd-workflow.md`, `docs/README.md`) and one modified file (`README.md`). Nothing else.
 
-- [ ] **Step 4: Confirm CI still passes**
+**Execution note (Step 3):** confirmed — matches the expected shape: 3 new files (`CLAUDE.md`, `docs/sdd-workflow.md`, `docs/README.md`), 1 modified (`README.md`), the foundational spec modified (content changes from Task 2's fold-in and Task 7's OQ6 resolution), the historical file deleted, and the plan file plus the shared-workspace-config-injection plan renamed from `docs/superpowers/plans/`. `git diff --stat main...HEAD`: 8 files changed, 1776 insertions(+), 189 deletions(-).
+
+- [x] **Step 4: Confirm CI still passes**
 
 Nothing here touches TypeScript, but run it — a stray edit is cheaper to find now.
 
@@ -1089,7 +1097,9 @@ npm ci && npm run lint && npm test
 
 Expected: all pass.
 
-- [ ] **Step 5: Artifact-persistence audit**
+**Execution note (Step 4):** ran all four CI jobs, not just the two literally named above — Lint (`tsc --noEmit`), Typecheck (`tsc --noEmit -p tsconfig.test.json`), Test (`vitest run`), and Compile (`tsc -p ./`). All four passed clean; Test matched the pre-change baseline exactly at 65/65, no regression. This is a stronger check than the step as originally written specified (it named only `npm run lint && npm test`); recorded here so a future reader knows all four jobs were actually verified, not just two.
+
+- [x] **Step 5: Artifact-persistence audit**
 
 Every file referenced by a committed file must itself be committed.
 
@@ -1099,7 +1109,9 @@ git ls-files 'docs/**' 'CLAUDE.md' 'README.md' | xargs grep -ohE '\]\(([A-Za-z0-
 
 Cross-check each result against `git ls-files`. A referenced-but-uncommitted file vanishes silently while CI stays green.
 
-- [ ] **Step 6: Push and open the PR**
+**Execution note (Step 5):** confirmed — every markdown link from `CLAUDE.md`, `README.md`, and `docs/**` resolves to a committed, existing file. Cross-checked each linked path against the filesystem individually.
+
+- [x] **Step 6: Push and open the PR**
 
 Body must include `Closes #84` so the issue auto-closes on merge, and must end with the Claude attribution line.
 
@@ -1107,9 +1119,13 @@ Body must include `Closes #84` so the issue auto-closes on merge, and must end w
 git push -u origin 84-formalize-sdd
 ```
 
+**Execution note (Step 6):** the command as written above names the stale worktree/branch name from Task 0 (`84-formalize-sdd`); the branch actually pushed is `84-formalize-spec-driven-development` (confirmed via `git branch --show-current` in the worktree). Pushed to `origin/84-formalize-spec-driven-development` and opened **PR #85** against `glitchwerks/vscode-claude-conductor` (base `main`) — see the Repository-owner caveat near the top of this document for why the repo path is `glitchwerks/...` rather than the `cbeaulieu-gt/...` used in this plan's own citations. PR body includes `Closes #84` and the Claude attribution line. URL: https://github.com/glitchwerks/vscode-claude-conductor/pull/85
+
 - [ ] **Step 7: Clean up the worktree after merge**
 
 Use the `clean-gone` skill (hyphen). Do not invoke `commit-commands:clean_gone`.
+
+**Step 7 is not yet done.** It runs after the PR merges, not as part of this verification pass.
 
 ---
 
