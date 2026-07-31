@@ -40,15 +40,18 @@ Directory: `plans/`
 | Document | Type | Status | Issue |
 |---|---|---|---|
 | [`2026-07-29-shared-workspace-config-injection.md`](plans/2026-07-29-shared-workspace-config-injection.md) | scoping-decision | DRAFT — 7 decision points and a 3-probe empirical gate unanswered; **no code should be written from it yet** | #81 |
-| [`2026-07-30-formalize-spec-driven-development.md`](plans/2026-07-30-formalize-spec-driven-development.md) | implementation-plan | DRAFT | #84 |
 
-The two pre-#84 documents predate the header-line convention in
-[`sdd-workflow.md`](sdd-workflow.md): the shared-workspace plan's own
-`**Status:**` line still reads `DECISION DOCUMENT`, and neither it nor the
-foundational spec carries a `**Type:**` line yet. The Type and Status values
-above are assigned by this index in the current vocabulary; retrofitting the
-header lines is tracked as open question 6 in the SDD formalization plan
-(`docs/plans/2026-07-30-formalize-spec-driven-development.md` § 8).
+The SDD formalization plan (`docs/plans/2026-07-30-formalize-spec-driven-development.md`,
+#84) has been deleted per the plan-lifecycle convention — #84 is closed and merged
+(PR #85), and its durable content (the D1 rename rationale, the CLAUDE.md and
+sdd-workflow.md it produced) already lives in this repo. No row remains for it here.
+
+The pre-#84 shared-workspace plan predates the header-line convention in
+[`sdd-workflow.md`](sdd-workflow.md): its own `**Status:**` line still reads
+`DECISION DOCUMENT`, and neither it nor the foundational spec carries a
+`**Type:**` line yet. The Type and Status values above are assigned by this
+index in the current vocabulary; retrofitting the header lines is tracked in
+issue #87.
 
 ## Research — external prior art
 
