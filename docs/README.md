@@ -1,7 +1,8 @@
 # Documentation index
 
-Everything in `docs/`, what it is, and whether it is current. Add a row when you
-add a document.
+Every document in `docs/`, what it covers, and — for specs and plans, which
+carry a status vocabulary — its current status. Add a row when you add a
+document.
 
 New here? Read [`sdd-workflow.md`](sdd-workflow.md) first — it explains the
 document types, why the folder names look the way they do, and what a spec needs
