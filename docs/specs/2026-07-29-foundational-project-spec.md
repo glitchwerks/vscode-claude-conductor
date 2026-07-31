@@ -1,7 +1,7 @@
 ---
 title: Claude Conductor — foundational project spec (problem statement + feature list)
 touches:
-  - docs/superpowers/specs/2026-07-29-foundational-project-spec.md
+  - docs/specs/2026-07-29-foundational-project-spec.md
   - README.md
   - package.json
   - src/hookInstaller.ts
@@ -49,7 +49,7 @@ The user is a **developer running two or more concurrent Claude Code CLI session
 
 Two structural details sharpen the audience:
 
-- **Git worktree users are a first-class case, not an edge case.** The extension carries a dedicated pure module for worktree-aware grouping that buckets `.worktrees/<branch>` children under a synthesised project root (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L67`, citing `src/projectGrouping.ts:89-135`), and the sidebar surfaces this to the user directly (`README.md:L24`).
+- **Git worktree users are a first-class case, not an edge case.** The extension carries a dedicated pure module for worktree-aware grouping that buckets `.worktrees/<branch>` children under a synthesised project root (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L67`, citing `src/projectGrouping.ts:89-135`), and the sidebar surfaces this to the user directly (`README.md:L24`).
 - **The prerequisite is the CLI, not the official extension.** Getting started requires only that *"the `claude` CLI is on your PATH"* (`README.md:L65`), and `package.json` declares no extension dependency on Anthropic's own VS Code extension (`package.json:L1-222` contains no `extensionDependencies` key).
 
 ### 1.3 Why a plain terminal is not enough — the design commitment
@@ -116,7 +116,7 @@ All six declared at `package.json:L148-185`.
 | `claudeConductor.claudeCommand` | string, `"claude"` | The CLI command dispatched into the terminal | `package.json:L151-155` |
 | `claudeConductor.reuseExistingTerminal` | boolean, `true` | Focus an existing session instead of opening a duplicate | `package.json:L156-160`, honoured at `src/sessionManager.ts:L88-94` |
 | `claudeConductor.enableNotifications` | boolean, `true` | Show notifications when a session is waiting | `package.json:L161-165` |
-| `claudeConductor.extraFolders` | string[], `[]` | Extra folder paths for the launcher; `~` is expanded | `package.json:L166-173`; expansion per `docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L199` citing `src/config.ts:22-26` |
+| `claudeConductor.extraFolders` | string[], `[]` | Extra folder paths for the launcher; `~` is expanded | `package.json:L166-173`; expansion per `docs/plans/2026-07-29-shared-workspace-config-injection.md:L199` citing `src/config.ts:22-26` |
 | `claudeConductor.launchDelayMs` | number, `500`, min `0` | Delay before `sendText` when shell integration is unavailable | `package.json:L174-179`, consumed at `src/sessionManager.ts:L162-165` |
 | `claudeConductor.debugLogging` | boolean, `false` | Verbose session-lifecycle diagnostics to the output channel | `package.json:L180-184` |
 
@@ -157,9 +157,9 @@ Thirteen TypeScript modules under `src/` plus one standalone hook script.
 | `sessionManager.ts` | Terminal registry and session lifecycle — see below |
 | `hookInstaller.ts` | Install / detect / reconcile / remove Claude Code hooks — see below |
 | `stateWatcher.ts` | Watches `~/.claude/session-state/*.json`, drives idle notifications, and calls `reconcile()` each poll tick (`src/sessionManager.ts:L203-210`) |
-| `folderSource.ts` | Merges VS Code recents with `extraFolders` into a flat `FolderEntry[]` (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L66` citing `src/folderSource.ts:52-92`) |
-| `projectGrouping.ts` | Pure, display-time-only worktree-aware grouping; persists nothing (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L67` citing `src/projectGrouping.ts:89-135`) |
-| `workspaceMatch.ts` | Pure case-insensitive path equality against the current workspace folder (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L68` citing `src/workspaceMatch.ts:16-24`) |
+| `folderSource.ts` | Merges VS Code recents with `extraFolders` into a flat `FolderEntry[]` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L66` citing `src/folderSource.ts:52-92`) |
+| `projectGrouping.ts` | Pure, display-time-only worktree-aware grouping; persists nothing (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L67` citing `src/projectGrouping.ts:89-135`) |
+| `workspaceMatch.ts` | Pure case-insensitive path equality against the current workspace folder (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L68` citing `src/workspaceMatch.ts:16-24`) |
 | `terminalLinks.ts` | Terminal link provider |
 | `treeView.ts` | `ActiveSessionsProvider` and `RecentProjectsProvider` (`src/extension.ts:L111-117`) |
 | `statusBar.ts` | Status-bar item (`src/extension.ts:L120`) |
@@ -201,9 +201,9 @@ D-4 was found while verifying this inventory and is not among the two discrepanc
 
 The current model identifies sessions by a name prefix the extension itself assigned (`src/sessionManager.ts:L9`, `L235-237`) and detects closure through a three-tier fallback plus poll-reconcile (§2.5). The desired end state replaces this with a Conductor-issued stable session ID, a PID-liveness cross-check, and an additional `SessionEnd` hook.
 
-- **[#68](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/68)** (open) — spike into why long-running session tabs fail close-detection when X'd. Phase A diagnostic logging has already landed: `debugLog` calls instrument every close tier, reconcile tick, and PID index write/delete throughout `src/sessionManager.ts:L213-360`, and the `debugLogging` setting that gates them ships in `package.json:L180-184`. Acceptance criteria are logging plus documented findings plus a follow-up issue — explicitly not the fix (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L229`). *unverified:* the commit commonly cited for this work is `960c33b` ("feat: add debug logging for session close-detection diagnostics (#68 phase A)"); this dispatch had no `git` access to confirm the SHA is reachable from `main`, so the shipped code above — not the SHA — is the evidence.
-- **[#33](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/33)** (open, milestone v1.4.0) — adopt externally-launched sessions from the official Claude extension's "Open in Terminal". Proposes an `ActiveSession.source: "owned" | "adopted"` field (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L230`). Name-prefix matching structurally cannot see terminals Conductor did not create and name.
-- **[#44](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/44)** (open) — spike a custom pty / process-wrapper with full lifecycle ownership and in-tab restart (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L231`). This is the highest-leverage and highest-risk item: a "go" removes the shell from the launch path entirely.
+- **[#68](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/68)** (open) — spike into why long-running session tabs fail close-detection when X'd. Phase A diagnostic logging has already landed: `debugLog` calls instrument every close tier, reconcile tick, and PID index write/delete throughout `src/sessionManager.ts:L213-360`, and the `debugLogging` setting that gates them ships in `package.json:L180-184`. Acceptance criteria are logging plus documented findings plus a follow-up issue — explicitly not the fix (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L229`). *unverified:* the commit commonly cited for this work is `960c33b` ("feat: add debug logging for session close-detection diagnostics (#68 phase A)"); this dispatch had no `git` access to confirm the SHA is reachable from `main`, so the shipped code above — not the SHA — is the evidence.
+- **[#33](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/33)** (open, milestone v1.4.0) — adopt externally-launched sessions from the official Claude extension's "Open in Terminal". Proposes an `ActiveSession.source: "owned" | "adopted"` field (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L230`). Name-prefix matching structurally cannot see terminals Conductor did not create and name.
+- **[#44](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/44)** (open) — spike a custom pty / process-wrapper with full lifecycle ownership and in-tab restart (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L231`). This is the highest-leverage and highest-risk item: a "go" removes the shell from the launch path entirely.
 
 Three externally-sourced leads bear directly on this cluster, each verified in the landscape survey:
 
@@ -213,14 +213,14 @@ Three externally-sourced leads bear directly on this cluster, each verified in t
 
 #### 2.7.2 Shared workspace-level config injection — #81
 
-A single shared `CLAUDE.md`-equivalent reaching every Conductor-launched session in a workspace, layered on top of each folder's own `CLAUDE.md` (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L30`).
+A single shared `CLAUDE.md`-equivalent reaching every Conductor-launched session in a workspace, layered on top of each folder's own `CLAUDE.md` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L30`).
 
-Currently a **decision document, not an implementation plan**, with seven decision points D1–D7 and a three-probe empirical Phase 0 gate (P1/P2/P3) that must return before any mechanism is recommended as final (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L20`, `L88-L112`, `L144-L221`). #81's own body scopes implementation out (`:L18`).
+Currently a **decision document, not an implementation plan**, with seven decision points D1–D7 and a three-probe empirical Phase 0 gate (P1/P2/P3) that must return before any mechanism is recommended as final (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L20`, `L88-L112`, `L144-L221`). #81's own body scopes implementation out (`:L18`).
 
 Two findings from that document constrain future work regardless of route:
 
-- A POSIX `VAR=value cmd` prefix fails silently on PowerShell, the project's primary shell; the env half must go through `createTerminal({ env })` (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L58-L62`).
-- The single-marker `HOOK_MARKER` design (§2.5) breaks if a second hook script is installed globally — partial installs become undetectable, the second script's paths go stale, and it is orphaned on removal (`docs/superpowers/plans/2026-07-29-shared-workspace-config-injection.md:L72-L80`). This couples any hook-based route to the #68 rework, which is also expected to add a `SessionEnd` hook to the same file (`:L239`).
+- A POSIX `VAR=value cmd` prefix fails silently on PowerShell, the project's primary shell; the env half must go through `createTerminal({ env })` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L58-L62`).
+- The single-marker `HOOK_MARKER` design (§2.5) breaks if a second hook script is installed globally — partial installs become undetectable, the second script's paths go stale, and it is orphaned on removal (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L72-L80`). This couples any hook-based route to the #68 rework, which is also expected to add a `SessionEnd` hook to the same file (`:L239`).
 
 *unverified:* a prior `project-reviewer` pass over this plan is reported to have returned 2 BLOCKING, 3 CONCERN, and 3 NIT findings. No such findings are recorded in the plan file and I had no GitHub-read tooling to confirm them; treat the counts as unconfirmed and re-check before relying on them.
 

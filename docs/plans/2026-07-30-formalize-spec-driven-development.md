@@ -284,7 +284,7 @@ git -C I:/ai/claude/vscode-claude-conductor/.worktrees/84-formalize-sdd commit -
 
 This is D1's confirmed decision, made mechanical. The routing-degradation consequence (§2.1) already happened the moment this task's `git mv` lands — there is no separate "point of no return" step.
 
-- [ ] **Step 1: Rename both directories with `git mv`**
+- [x] **Step 1: Rename both directories with `git mv`**
 
 ```bash
 git mv docs/superpowers/specs docs/specs
@@ -294,7 +294,7 @@ git status --short
 
 Expected: four renames (`R`), one per file that was under either directory — both spec files and both plan files (including this plan, now at `docs/plans/2026-07-30-formalize-spec-driven-development.md`).
 
-- [ ] **Step 2: Fix path-prefix references inside the foundational spec**
+- [x] **Step 2: Fix path-prefix references inside the foundational spec**
 
 The only tracked files anywhere in the repo that reference `docs/superpowers` are the foundational spec and this plan file (per the repo-wide grep in §2.1). Fix the foundational spec's references that are plain path prefixes (not the four historical-file citations, which Task 2 rewrites completely):
 
@@ -304,15 +304,15 @@ grep -n 'docs/superpowers' docs/specs/2026-07-29-foundational-project-spec.md
 
 Replace every `docs/superpowers/plans/` with `docs/plans/`, and the frontmatter's own `docs/superpowers/specs/2026-07-29-foundational-project-spec.md` self-reference with `docs/specs/2026-07-29-foundational-project-spec.md`. These are path-prefix substitutions only — none of the cited line numbers (e.g. `:L67`, `:L199` into the shared-workspace-config-injection plan) change, because a `git mv` does not alter a file's internal line numbers.
 
-- [ ] **Step 3: Verify no stale path references remain outside this plan file**
+- [x] **Step 3: Verify no stale path references remain outside this plan file**
 
 ```bash
 git grep -n 'superpowers/' -- ':!docs/plans/2026-07-30-formalize-spec-driven-development.md'
 ```
 
-Expected: no output. (This plan file itself is excluded because it legitimately narrates the *old* path in past tense while describing the D1/D3 decisions — that is history, not a live reference. Everything else in the repo must be clean.)
+Expected: exactly the four historical-file citations Step 2 deliberately left alone (`docs/specs/2026-07-29-foundational-project-spec.md:L59,L61,L80,L83`, each citing `docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`) — Task 2 rewrites these to a heading anchor rather than path-prefixing them, so they still read `docs/superpowers/` until that task runs. (This plan file itself is excluded because it legitimately narrates the *old* path in past tense while describing the D1/D3 decisions — that is history, not a live reference. Anything else in the repo must be clean; if this grep turns up more than those four lines, find and fix it before committing.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A
