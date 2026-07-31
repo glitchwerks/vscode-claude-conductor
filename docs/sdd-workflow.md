@@ -36,16 +36,27 @@ Specs and plans share directories with each other by type, not by lifecycle:
 `specs/` holds "what and why", `plans/` holds "which decisions" and "which
 steps". Declare which one a document is in its `**Type:**` line.
 
+**Known gap: standing process documents (`docs/<name>.md`, e.g. this file and
+`docs/release-strategy.md`) have no entry in the table above.** `CLAUDE.md`'s
+own "Where documents live" table names that fourth kind; this document does
+not yet define a matching type value for it. Whether to add a sixth type or
+otherwise close the gap is undecided — tracked in #84 (open, fetched
+2026-07-31).
+
 ## Why the paths are fixed
 
 `docs/specs/`, `docs/plans/`, and `docs/research/` are not cosmetic. All three
-are path-glob routing triggers for the maintainer's agent harness, but as of
-#84 (D1) they no longer behave identically: **only `docs/research/` still
-auto-routes** to architectural review today. A document under `docs/specs/`
-or `docs/plans/` does not auto-route — a contributor who wants `project-reviewer`
-or `architectural-review-for-plans` on a new spec or plan must invoke it
-explicitly (see `CLAUDE.md` § Where documents live for the same rule stated at
-always-loaded-context length).
+are path-glob routing triggers for the maintainer's agent harness, but they
+route to different consumers, and as of #84 (D1) not all of them still fire.
+`docs/research/`'s trigger is intact and dispatches the `researcher` agent for
+external prior-art documents — that is unaffected by anything below. The
+*automatic-review* triggers, for `project-reviewer` and
+`architectural-review-for-plans`, were keyed to the pre-rename
+`docs/superpowers/specs/` and `docs/superpowers/plans/` paths and do not match
+the current `docs/specs/`/`docs/plans/` paths at all. A contributor who wants
+architectural review on a new spec or plan must invoke `project-reviewer` or
+`architectural-review-for-plans` explicitly (see `CLAUDE.md` § Where documents
+live for the same rule stated at always-loaded-context length).
 
 **A rename fails silently.** There is no error, no warning, and no log line —
 specs and plans under a renamed directory simply stop being reviewed

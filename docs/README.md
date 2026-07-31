@@ -9,10 +9,8 @@ to contain.
 
 ## Process documents
 
-This index does not carry a row for itself (`docs/README.md`) — Task 6's own
-coverage check (every `docs/**/*.md` file must appear as a link here) is
-written to exclude it by name, so the absence is a stated exception, not a
-gap.
+This index does not carry a row for itself (`docs/README.md`) — that is a
+stated exception, not a gap.
 
 | Document | What it covers |
 |---|---|

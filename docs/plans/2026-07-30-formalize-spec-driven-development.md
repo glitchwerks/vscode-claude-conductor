@@ -1201,7 +1201,7 @@ Recommend grouping under a new milestone, e.g. **"Documentation and process"**, 
 
 ## 10. Quality-check notes and honesty ledger
 
-- **Tooling unavailable to this dispatch:** `Bash`, `mcp__github__*`, and `Write`-to-GitHub of any kind. Issue #84's state was obtained by fetching its public page on 2026-07-30, not through the API. No issue was created, no comment posted, no acceptance criterion ticked.
+- **Tooling unavailable to this dispatch:** `Bash`, `mcp__github__*`, and `Write`-to-GitHub of any kind. Issue #84's state was obtained by fetching its public page on 2026-07-31, not through the API. No issue was created, no comment posted, no acceptance criterion ticked.
 - **Repo claims** were read at the cited lines on 2026-07-30 at commit `baacee0`.
 - **Harness claims are not repo-verifiable.** The four routing triggers in §2.1 and §3.1 cite files under `C:\Users\chris\.claude\` — the maintainer's machine-local agent and skill definitions. They were read directly at the cited lines, but no other contributor and no CI job can verify them. This is itself part of R2.
 - **Checked and found *not* to be a defect:** `README.md:L136` claims CI runs "lint, typecheck, tests, and compile". `package.json:L209` defines `lint` as `tsc --noEmit`, which looks like a duplicate of typecheck — but `.github/workflows/ci.yml:L21-L36` shows the two jobs run against *different* tsconfigs (main vs `tsconfig.test.json`). The README is accurate. Recorded here so the next reader does not re-investigate.
