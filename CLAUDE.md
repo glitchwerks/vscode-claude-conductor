@@ -93,16 +93,18 @@ spec; you will not need it again after that.
 ## Build and test
 
 ```bash
-npm install         # install dependencies
-npm test            # run tests once
-npm run test:watch  # watch mode
-npm run lint        # tsc --noEmit against the main tsconfig
-npm run compile     # tsc -p ./
+npm install                                    # install dependencies
+npm test                                       # run tests once
+npm run test:watch                             # watch mode
+npm run lint                                   # tsc --noEmit against the main tsconfig
+npx tsc --noEmit -p tsconfig.test.json         # typecheck against the test tsconfig (separate CI job)
+npm run compile                                # tsc -p ./
 ```
 
 Unit tests only — the `vscode` module is mocked, so no VS Code instance is
 needed. CI runs lint, typecheck, test, and compile as four separate jobs on every
-PR and push to `main`.
+PR and push to `main`. Lint and typecheck run against different tsconfigs
+(main vs. test) and can disagree — run both locally before pushing.
 
 **Always add or update tests when changing behaviour.** New behaviour gets a test
 for the new path; a bug fix gets a regression test that would have failed before
