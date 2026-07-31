@@ -644,7 +644,7 @@ git commit -m "docs: define SDD document types, templates, and citation rules (#
 
 **D7 confirmed (§2.7, 2026-07-31, as recommended):** the spec-required threshold used in Step 1's `CLAUDE.md` content below implements that decision; no further confirmation is needed before starting this task.
 
-- [ ] **Step 1: Create the file with this content**
+- [x] **Step 1: Create the file with this content**
 
 ```markdown
 # Claude Conductor — project conventions
@@ -773,7 +773,7 @@ accepted spec into an implementation plan. Neither is required — the workflow 
 `docs/sdd-workflow.md` is tool-neutral.
 ```
 
-- [ ] **Step 2: Verify no machine-local paths or import directives leaked in**
+- [x] **Step 2: Verify no machine-local paths or import directives leaked in**
 
 ```bash
 grep -nE '@[A-Za-z]:\\|C:\\Users|~/\.claude/standards|^@' CLAUDE.md
@@ -781,7 +781,7 @@ grep -nE '@[A-Za-z]:\\|C:\\Users|~/\.claude/standards|^@' CLAUDE.md
 
 Expected: no output. A hit means D5 was violated — a path that resolves for one machine only.
 
-- [ ] **Step 3: Verify every linked repo path resolves**
+- [x] **Step 3: Verify every linked repo path resolves**
 
 ```bash
 grep -oE '\]\(([A-Za-z0-9._/-]+)\)' CLAUDE.md | sed -E 's/^\]\((.*)\)$/\1/' | sort -u | while read -r p; do
@@ -791,7 +791,7 @@ done
 
 Expected: all `OK`. `docs/sdd-workflow.md` exists from Task 3; `docs/release-strategy.md` already exists.
 
-- [ ] **Step 4: Verify the build commands match `package.json`**
+- [x] **Step 4: Verify the build commands match `package.json`**
 
 ```bash
 grep -nE '"(compile|lint|test|test:watch)":' package.json
@@ -799,7 +799,7 @@ grep -nE '"(compile|lint|test|test:watch)":' package.json
 
 Expected: `compile` = `tsc -p ./`, `lint` = `tsc --noEmit`, `test` = `vitest run`, `test:watch` = `vitest`. If any differs, fix `CLAUDE.md` — do not "fix" `package.json`.
 
-- [ ] **Step 5: Fresh-eyes read**
+- [x] **Step 5: Fresh-eyes read**
 
 Read `CLAUDE.md` top to bottom as a contributor who has never seen this repo.
 Check: does any rule contradict another? Is every "never" actually inviolable
@@ -809,12 +809,14 @@ document by line number without keeping the citing and cited edits in the same
 commit — both cause silent, hard-to-detect damage)? Is anything unfollowable
 without a plugin installed?
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add CLAUDE.md
 git commit -m "docs: add project-level CLAUDE.md enforcing spec-driven development (#84)"
 ```
+
+**Execution note (Task 4):** committed as `3352b50`. All five verification steps (Steps 2–5, plus the fresh-eyes read within Step 5) passed clean on first attempt — no machine-local paths, both linked paths (`docs/sdd-workflow.md`, `docs/release-strategy.md`) resolved, the build-command grep matched exactly, and exactly two "never" rules were present as expected. No plan-file bugs found this time, unlike Tasks 1–3.
 
 ---
 
