@@ -14,6 +14,7 @@ them by hand.
 research  →  scoping decision  →  spec  →  implementation plan  →  code
 (optional)   (optional*)          (required for behaviour changes)
 ```
+
 \* Required, not optional, for pathfinding spikes whose output is a
 recommendation or decision — see below.
 
