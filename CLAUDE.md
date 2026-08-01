@@ -68,7 +68,7 @@ Every factual or judgement claim in a spec, plan, or research document must cite
 a verifiable source, inline:
 
 - a claim about this repo → `path/to/file.ts:L42-L55`, read at those exact lines
-- a claim about a GitHub issue or PR → its number, its state, and the date you checked
+- a claim about a GitHub issue or PR → its number, its state, and the date you checked (the foundational spec is exempt from the date requirement — see `docs/sdd-workflow.md` § Citing sources).
 - a claim about anything external → the URL plus `(fetched YYYY-MM-DD)`
 
 Verify **before** writing the claim, not in a cleanup pass. If you cannot verify
@@ -80,9 +80,13 @@ substitutions.** No inserted lines, no removed lines, no reflow — shifted line
 silently redirect other documents' citations to the wrong text. #84 hit this
 once: the v1 session-manager design was folded into the foundational spec and
 its four line-citations rewritten to a heading anchor rather than a line
-number, specifically to stop the fragility from recurring. Prefer a heading
-anchor over a line number wherever a citation might otherwise outlive a future
-edit.
+number, specifically to stop the fragility from recurring. #94 later distilled
+that section to just the four cited quotes and removed the heading; the
+citations now point at the original v1 design spec and git history rather than
+a heading anchor, but the same discipline — don't let a restructure silently
+break a citation — is what both changes preserved. Prefer a heading anchor
+(or, once that heading is gone, an explicit git-history pointer) over a line
+number wherever a citation might otherwise outlive a future edit.
 
 ## Document shapes
 

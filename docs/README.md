@@ -28,10 +28,15 @@ Directory: `specs/`
 
 The foundational spec is the durable anchor: problem statement, audience,
 feature inventory, and roadmap. Per-feature specs reference it rather than
-restating it. It also carries, in its § 1.6, the v1 session-manager design
-originally recorded in a separate `2026-04-14-session-manager-v1-design.md`
-file — folded in and the original deleted as part of #84 (D3). There is no
-separate row for that content; it is part of this document now.
+restating it. It previously carried, in its § 1.6, the full v1
+session-manager design originally recorded in a separate
+`2026-04-14-session-manager-v1-design.md` file — folded in and the original
+deleted as part of #84 (D3). #94 distilled that section down to the four
+load-bearing quotes §1.3 and §1.5 actually cited, inlined them at those
+citation sites, and removed the rest (superseded by the § 2 inventory above);
+the full verbatim v1 design remains recoverable via git history. There is no
+separate row because the standalone document was deleted after its content
+was folded into the foundational spec.
 
 ## Plans — decisions and steps
 

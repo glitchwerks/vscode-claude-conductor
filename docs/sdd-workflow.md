@@ -198,6 +198,34 @@ cite a verifiable source, inline, at the point of the claim.
 | An external page | URL plus `(fetched YYYY-MM-DD)` | Fetching it |
 | A commit | the SHA | `git log <sha>` |
 
+**Exception: the foundational spec.** The table above is the default for every
+`scoping-decision`, `feature-spec`, and `implementation-plan` — documents that
+lock their citations at `ACCEPTED` and legitimately benefit from a dated
+snapshot. `docs/specs/2026-07-29-foundational-project-spec.md` is the one
+`foundational-spec` ("There is exactly one," continuously maintained, never
+locked) and is the sole exception: its repo and GitHub issue/PR citations omit
+the fetch-date and commit SHA, keeping only the path/line or the issue/PR
+number and state, because git and live GitHub queries already track when
+something was true and a hand-written date would only drift from that
+silently (#94). External URL citations in that document still carry
+`(fetched YYYY-MM-DD)` — git does not track drift on pages it doesn't host, so
+that stamp still earns its keep there. For the same reason, that document
+carries no `## Verification note` section (see the spec template above): that
+section records a point-in-time read, which is exactly what a continuously
+maintained document should not imply about itself. This carve-out applies to that one
+document; every other spec and plan in this repo follows the table as
+written. The same carve-out applies to the foundational spec's own
+`**Tracking issue:**` header line (§ Header lines above): the `— verified
+<open|closed>, body fetched <YYYY-MM-DD>` template is the default for every
+other spec and plan, but on the foundational spec that line drops both
+`verified` and the dated `body fetched` clause for the same reason — a live
+GitHub query already tells you the current state, and a hand-written date
+only drifts from it. `CLAUDE.md § Citing sources` states the general rule
+("its number, its state, and the date you checked") that this document
+elaborates; where the two appear to disagree on the foundational spec
+specifically, this carve-out is the authoritative elaboration, not a
+contradiction of CLAUDE.md's default.
+
 **Verify before you write the claim, not after.** A post-hoc pass normalises
 errors ("the citation backs the sentence I already wrote") instead of catching
 them.
@@ -242,6 +270,18 @@ maintaining a separate pre-convention file under permanent no-edit protection,
 the content now lives inside the document that was already citing it, and
 those four citations were rewritten to reference `§1.6` by heading instead of
 by line number.
+
+Issue `#94` distilled that further. The bulk of §1.6 — the Activity Bar/Sidebar spec,
+Quick-Pick Launcher, Terminal-as-Editor-Tab design, Status Bar, Active Session
+Detection, Terminal Link Provider, Keyboard Navigation, the old configuration
+schema, Extension Activation, the commands table, and the file structure — was
+superseded by §2's current-state inventory and added nothing but drift risk.
+The four load-bearing quotes §1.3 and §1.5 actually cited were inlined
+directly at their citation sites instead of pointing at a section, and the
+rest of §1.6 — along with the §1.6 heading itself — was removed. The
+foundational spec no longer has a §1.6; the full verbatim v1 design remains
+recoverable from this file's git history and from the commit that originally
+folded in the deleted `2026-04-14-session-manager-v1-design.md`.
 
 The general rule this illustrates still applies to any future case: **when a
 document is cited by line number, edits to it must be same-line

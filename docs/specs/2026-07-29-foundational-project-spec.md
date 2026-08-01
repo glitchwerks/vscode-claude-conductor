@@ -2,6 +2,8 @@
 title: Claude Conductor — foundational project spec (problem statement + feature list)
 touches:
   - docs/specs/2026-07-29-foundational-project-spec.md
+  - docs/sdd-workflow.md
+  - docs/README.md
   - README.md
   - package.json
   - src/hookInstaller.ts
@@ -13,7 +15,7 @@ skills_relevant:
 
 # Claude Conductor — Foundational Project Spec
 
-**Tracking issue:** [#82 "Author foundational project spec (problem statement + feature list) for Spec-Driven Development"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/82) — verified **open**, label `documentation`, no milestone; body fetched 2026-07-29.
+**Tracking issue:** [#82 "Author foundational project spec (problem statement + feature list) for Spec-Driven Development"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/82) — **closed**, label `documentation`, no milestone.
 
 **Type:** foundational-spec
 
@@ -21,13 +23,13 @@ skills_relevant:
 
 ## Scope of this document
 
-This is the **seed** of the project spec, not the whole spec. Issue #82 scopes it to exactly two content sections — the problem statement (§1) and the feature list / desired functionality (§2) — and explicitly places out of scope *"Requirements/acceptance-criteria-level spec detail for individual features (follow-on work per feature, not this issue)"* and *"Implementation of any feature listed"* (#82 body, fetched 2026-07-29).
+This is the **seed** of the project spec, not the whole spec. Issue #82 scopes it to exactly two content sections — the problem statement (§1) and the feature list / desired functionality (§2) — and explicitly places out of scope *"Requirements/acceptance-criteria-level spec detail for individual features (follow-on work per feature, not this issue)"* and *"Implementation of any feature listed"* (#82 body).
 
 Accordingly, §2 inventories **what exists and what is wanted**. It deliberately does not state acceptance criteria, testable requirements, or designs. Each feature is a future spec's subject, not this one's.
 
 Two housekeeping subsections are folded into §2 rather than raised as new top-level sections: §2.6 (documentation discrepancies, required by #82 acceptance criterion 4) and §2.7 (roadmap). §3 lists open questions per this project's planning convention.
 
-**Citation convention.** Every claim below cites a verifiable source per `CLAUDE.md § Cite Sources in Planning Artifacts`. Repo claims cite `path:Lx-Ly` and were read at the cited lines on 2026-07-29 at commit `baacee0`. GitHub state was fetched 2026-07-29. Anything not verified is prefixed `unverified:`.
+**Citation convention.** Every claim below cites a verifiable source per `CLAUDE.md § Citing sources`. This document is the foundational spec — continuously maintained, not a frozen snapshot (`docs/sdd-workflow.md` § Document types: "There is exactly one") — so repo claims cite `path:Lx-Ly` without a fetch-date or commit SHA, and GitHub issue/PR claims cite the number and state (open/closed/merged) without a fetch-date: git and live GitHub queries already track when something was true, and a hand-written date would only drift from that silently. External URL citations keep their `(fetched YYYY-MM-DD)` stamp, since git does not track drift on pages it doesn't host. Anything not verified is prefixed `unverified:`.
 
 ---
 
@@ -58,9 +60,9 @@ Two structural details sharpen the audience:
 
 The project's answer is to **promote each Claude session from a panel terminal to a first-class editor tab**, so sessions inherit the window-management affordances VS Code already gives code files: *"you can tile them, pin them, and glance at multiple sessions at once like you would with code files"* (`README.md:L32`).
 
-This was a deliberate v1 design decision, not an accident of implementation. The v1 design spec records it as *"Promote terminals to editor tabs... This gives each session visual parity with code files and supports the tab-per-project mental model"* (§1.6, this document), implemented via `workbench.action.terminal.moveToEditor` (`src/sessionManager.ts:L108`).
+This was a deliberate v1 design decision, not an accident of implementation. The v1 session-manager design spec records it as *"Promote terminals to editor tabs... This gives each session visual parity with code files and supports the tab-per-project mental model"* (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`, added in commit `5762838ca2e35538f6dbaffcc280a23c557f3342`, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history), implemented via `workbench.action.terminal.moveToEditor` (`src/sessionManager.ts:L108`).
 
-The same spec records **why launching must go through a terminal at all**, which is the constraint that gives this project a reason to exist separate from Anthropic's own extension: *"The Claude Code VS Code extension commands (`claude-vscode.editor.open` etc.) don't accept a folder argument — they always scope to the current workspace. Terminal with `cwd` is the only way to target a different folder without switching workspaces"* (§1.6, this document).
+The same spec records **why launching must go through a terminal at all**, which is the constraint that gives this project a reason to exist separate from Anthropic's own extension: *"The Claude Code VS Code extension commands (`claude-vscode.editor.open` etc.) don't accept a folder argument — they always scope to the current workspace. Terminal with `cwd` is the only way to target a different folder without switching workspaces"* (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`, added in commit `5762838ca2e35538f6dbaffcc280a23c557f3342`, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history).
 
 That single sentence is the project's foundation. **The official tooling is single-workspace-scoped; the problem is inherently multi-project.** Conductor exists to close that gap.
 
@@ -79,186 +81,10 @@ Two properties of this approach are load-bearing and belong in the problem state
 
 The problem statement is bounded. These are stated limitations of the current product, not unsolved bugs:
 
-- **Single-window scope.** *"Session tracking only works within a single VS Code window (sessions in other windows aren't visible in the sidebar)"* (`README.md:L120`); the v1 spec placed "Multi-window session tracking" out of scope from the start (§1.6, this document).
+- **Single-window scope.** *"Session tracking only works within a single VS Code window (sessions in other windows aren't visible in the sidebar)"* (`README.md:L120`); the v1 spec placed "Multi-window session tracking" out of scope from the start (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`, added in commit `5762838ca2e35538f6dbaffcc280a23c557f3342`, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history).
 - **Idle threshold is not tunable.** The notification fires on *"Claude Code's built-in ~60-second idle threshold — not tunable from the extension"* (`README.md:L121`).
 - **No tab-level attention indicator.** *"VS Code terminal tabs cannot change color or flash after creation"*, so attention is signalled via sidebar icons and notifications instead (`README.md:L122`).
-- **No programmatic interaction with sessions.** Sending prompts, or reading conversation history, was placed out of scope in v1 (§1.6, this document). Conductor orchestrates sessions; it does not talk to them.
-
-### 1.6 Historical record: the v1 session-manager design
-
-Folded in from `2026-04-14-session-manager-v1-design.md` per #84 (open, fetched 2026-07-31; decision D3); quoted verbatim, not restated. The original file predated this project's citation and frontmatter conventions and has been deleted — its full content is reproduced below verbatim, apart from a language tag added to one code fence for lint conformance, as a blockquote.
-
-> # Claude Session Manager v1.0 — Design Spec
->
-> ## Overview
->
-> A VS Code extension for managing multiple Claude Code CLI sessions across different projects. Each session runs in a terminal promoted to an editor tab, giving users a tab-per-project workflow for monitoring and switching between concurrent Claude sessions.
->
-> ## Problem
->
-> The previous version (v0.1) scanned `~/.claude/projects/` and attempted to decode folder names back to real filesystem paths. The encoding is lossy — spaces, dots, and underscores all collapse to hyphens — causing ~70% of folders to fail decoding. The extension needs a reliable folder source and richer session management UX.
->
-> ## Design Decisions
->
-> - **Drop `~/.claude/projects` scanning entirely.** The encoding is fundamentally ambiguous and cannot be reliably decoded. No fallback, no partial decode.
-> - **Use VS Code recent folders as the primary folder source.** Accessed via `_workbench.getRecentlyOpened()` internal command. Returns resolved URIs — no decoding needed. Covers virtually all real usage since users open projects in VS Code before launching Claude.
-> - **Keep terminal-based launch.** The Claude Code VS Code extension commands (`claude-vscode.editor.open` etc.) don't accept a folder argument — they always scope to the current workspace. Terminal with `cwd` is the only way to target a different folder without switching workspaces.
-> - **Promote terminals to editor tabs.** Each Claude session opens as an editor tab (via `workbench.action.terminal.moveToEditor`) rather than living in the bottom terminal panel. This gives each session visual parity with code files and supports the tab-per-project mental model.
->
-> ## Components
->
-> ### 1. Activity Bar + Sidebar Tree View
->
-> A dedicated "Claude Sessions" panel registered in the activity bar with a sparkle icon.
->
-> **Tree structure — two sections:**
->
-> - **Active Sessions** — currently running Claude terminal tabs
->   - Each item shows: folder name, running duration, green status indicator
->   - Click: focus the session's editor tab
->   - Right-click context menu: Focus, Close
-> - **Recent Projects** — folders from VS Code recents + `extraFolders` config
->   - Each item shows: folder name, parent directory path
->   - Click or inline play-button: launch a new session
->   - Folders that already have an active session are excluded from this section (they appear in Active Sessions instead)
->
-> **Data flow:**
-> - On activation and on terminal open/close events, refresh both sections
-> - Active sessions detected by matching terminal name pattern `claude · *` or `cwd`
-> - Recent folders fetched from `_workbench.getRecentlyOpened()`, filtered to folders only (exclude workspaces and files)
->
-> ### 2. Quick-Pick Launcher
->
-> Keyboard shortcut `Ctrl+Shift+Alt+C` (Mac: `Cmd+Shift+Alt+C`) opens a quick-pick.
->
-> **Sort order:**
-> 1. Active sessions — marked with terminal icon, selecting focuses existing tab
-> 2. Recent folders — VS Code recency order
-> 3. Extra folders — labeled "configured"
->
-> **Behavior:**
-> - Selecting an active session focuses its editor tab
-> - Selecting a folder launches a new session (or focuses existing if `reuseExistingTerminal` is on)
->
-> ### 3. Terminal-as-Editor-Tab Launch
->
-> When a session is launched:
->
-> 1. Create a named terminal: `claude · <folder-name>`
->    - `cwd`: selected folder path
->    - `iconPath`: sparkle ThemeIcon
->    - `color`: `terminal.ansiGreen`
-> 2. Move terminal to editor area via `workbench.action.terminal.moveToEditor`
-> 3. Auto-send the configured `claudeCommand` (default: `"claude"`)
->
-> If `reuseExistingTerminal` is enabled and a terminal matching the folder already exists, just focus it.
->
-> ### 4. Status Bar
->
-> A status bar item on the left side:
->
-> - Shows `⚡ N sessions` when N > 0
-> - Hidden when no active sessions
-> - Click opens the quick-pick launcher
->
-> Updates reactively on terminal open/close events.
->
-> ### 5. Active Session Detection
->
-> Terminals are identified as Claude sessions by:
-> - Name matching pattern `claude · *` (primary — our naming convention)
-> - `creationOptions.cwd` matching a known folder path (fallback)
->
-> The extension listens to:
-> - `window.onDidOpenTerminal` — add to active sessions
-> - `window.onDidCloseTerminal` — remove from active sessions
->
-> Limitation: only detects sessions in the current VS Code window.
->
-> ### 6. Terminal Link Provider
->
-> Register a `TerminalLinkProvider` that:
-> - Matches file paths in Claude's terminal output (e.g., `src/components/App.tsx`, `C:\Users\chris\project\file.ts`)
-> - On click, opens the file in the editor via `vscode.window.showTextDocument`
->
-> This makes Claude's file references directly clickable.
->
-> ### 7. Keyboard Navigation
->
-> Two additional keybindings:
-> - **Next Claude Session** — cycles forward through Claude terminal tabs only
-> - **Previous Claude Session** — cycles backward
->
-> Implementation: filter `window.terminals` to those matching the Claude name pattern, maintain an index, and focus the next/previous one.
->
-> ## Configuration
->
-> ```json
-> {
->   "claudeSessions.claudeCommand": {
->     "type": "string",
->     "default": "claude",
->     "description": "The Claude Code CLI command to run"
->   },
->   "claudeSessions.reuseExistingTerminal": {
->     "type": "boolean",
->     "default": true,
->     "description": "Focus existing session tab instead of opening a duplicate"
->   },
->   "claudeSessions.extraFolders": {
->     "type": "array",
->     "items": { "type": "string" },
->     "default": [],
->     "description": "Additional folder paths to show in the session launcher"
->   }
-> }
-> ```
->
-> **Removed from v0.1:**
-> - `claudeProjectsDir` — no longer scan `~/.claude/projects`
->
-> **Renamed config prefix** from `claudeFolderSessions` to `claudeSessions` (shorter, reflects the expanded scope).
->
-> ## Extension Activation
->
-> - `onStartupFinished` — to populate the sidebar tree view on launch
-> - Terminal event listeners registered immediately to track session lifecycle
->
-> ## Commands
->
-> | Command ID | Title | Keybinding |
-> |---|---|---|
-> | `claudeSessions.openSession` | Claude Sessions: Launch Session | `Ctrl+Shift+Alt+C` |
-> | `claudeSessions.addFolder` | Claude Sessions: Add Folder | — |
-> | `claudeSessions.nextSession` | Claude Sessions: Next Session | `Ctrl+Alt+]` |
-> | `claudeSessions.prevSession` | Claude Sessions: Previous Session | `Ctrl+Alt+[` |
-> | `claudeSessions.focusSession` | Claude Sessions: Focus Session | — (tree view click) |
-> | `claudeSessions.closeSession` | Claude Sessions: Close Session | — (context menu) |
->
-> ## File Structure
->
-> ```text
-> vscode-claude-sessions/
-> ├── src/
-> │   ├── extension.ts          # Activation, command registration
-> │   ├── sessionManager.ts     # Core session tracking, terminal lifecycle
-> │   ├── folderSource.ts       # VS Code recents + extraFolders fetching
-> │   ├── treeView.ts           # Sidebar tree data provider
-> │   ├── quickPick.ts          # Quick-pick launcher
-> │   ├── statusBar.ts          # Status bar item
-> │   ├── terminalLinks.ts      # Terminal link provider
-> │   └── config.ts             # Configuration helpers
-> ├── package.json
-> ├── tsconfig.json
-> └── .vscodeignore
-> ```
->
-> ## Out of Scope
->
-> - Sending prompts or interacting with Claude sessions programmatically
-> - Reading session history or conversation data
-> - Multi-window session tracking
-> - Workspace/multi-root folder support in tree view
+- **No programmatic interaction with sessions.** Sending prompts, or reading conversation history, was placed out of scope in v1 (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`, added in commit `5762838ca2e35538f6dbaffcc280a23c557f3342`, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history). Conductor orchestrates sessions; it does not talk to them.
 
 ---
 
@@ -373,7 +199,7 @@ D-4 was found while verifying this inventory and is not among the two discrepanc
 
 ### 2.7 Desired functionality — in-flight and candidate work
 
-**Not shipped.** Everything below is an open issue or an unmerged PR as of 2026-07-29. Listed as desired functionality per #82 acceptance criterion 3; none is current behaviour.
+**Not shipped.** Everything below is an open issue or an unmerged PR. Listed as desired functionality per #82 acceptance criterion 3; none is current behaviour.
 
 #### 2.7.1 Session-tracking architecture rework — #68 / #33 / #44
 
@@ -404,7 +230,7 @@ Two findings from that document constrain future work regardless of route:
 
 #### 2.7.3 Favorites sidebar section — #75 / PR #77 (unmerged)
 
-A third tree view between Active Sessions and Recent Projects, with star-toggle persistence, missing-folder relocation via a folder picker, and a soft cap of 25 with an over-cap banner. **[PR #77](https://github.com/cbeaulieu-gt/vscode-claude-conductor/pull/77)** is **open and not merged** (verified 2026-07-29), stating `Closes #75`. **[#75](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/75)** remains open.
+A third tree view between Active Sessions and Recent Projects, with star-toggle persistence, missing-folder relocation via a folder picker, and a soft cap of 25 with an over-cap banner. **[PR #77](https://github.com/cbeaulieu-gt/vscode-claude-conductor/pull/77)** is **open and not merged**, stating `Closes #75`. **[#75](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/75)** remains open.
 
 Two open bugs sit on this same surface and presuppose the Favorites work:
 
@@ -413,7 +239,7 @@ Two open bugs sit on this same surface and presuppose the Favorites work:
 
 #### 2.7.4 Other open desired functionality
 
-These were not in the original inventory but are open issues verified on 2026-07-29 and belong in a foundational feature list.
+These were not in the original inventory but are open issues that belong in a foundational feature list.
 
 - **[#76](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/76)** (open) — "Treat Conductor sessions as ephemeral; suppress VS Code terminal restore". **Ready to move:** the landscape survey resolves its stated acceptance-criterion question, confirming `isTransient: true` is the correct and still-current mechanism with no counter-evidence, and explicitly hands off to planning (`docs/research/2026-07-29-vscode-claude-conductor-landscape-survey.md:L128`, `L142`).
 - **[#80](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/80)** (open) — rename (alias), delete, and bulk-select for sidebar sessions and folders. Prompted by competitor research: the closest actively-maintained competitor ships rename/delete/bulk-selection UX that Conductor lacks (`docs/research/2026-07-29-vscode-claude-conductor-landscape-survey.md:L59`).
@@ -429,11 +255,5 @@ These were not in the original inventory but are open issues verified on 2026-07
 3. **How should D-1 be resolved — in which direction?** Lowering the manifest floor to 1.85 and raising the README to 1.93 are both "fixes," but they are opposite product decisions. The `1.93` floor is what makes the shell-integration fast path available (`src/sessionManager.ts:L126-130`; shell integration is stable since 1.93 per `docs/research/2026-07-29-vscode-claude-conductor-landscape-survey.md:L129`), which argues for correcting the README rather than the manifest. **⚠️ Confirmation needed** — this is a compatibility decision, not a doc typo.
 4. **Should the roadmap in §2.7 be ranked?** It is currently grouped by theme, not priority. #82 does not ask for sequencing, but every item there eventually needs an order, and #44's outcome dominates the sequencing of §2.7.1 and §2.7.2 both.
 5. **Is PR #77 intended to merge as-is, or be superseded?** It is open and unmerged while #78 and #79 describe defects on the surface it introduces. Whether those are fixed inside #77 or after it changes what §2.7.3 should say.
-6. **RESOLVED (#84, open, fetched 2026-07-31): per-feature specs anchored by this foundational spec.** ~~Does "Spec-Driven Development" here mean a spec per feature, or one living spec?~~ This document remains the durable foundation; per-feature specs reference it rather than restating it. The convention is documented at `docs/sdd-workflow.md`. No restructure of §2 is needed.
+6. **RESOLVED (#84, closed): per-feature specs anchored by this foundational spec.** ~~Does "Spec-Driven Development" here mean a spec per feature, or one living spec?~~ This document remains the durable foundation; per-feature specs reference it rather than restating it. The convention is documented at `docs/sdd-workflow.md`. No restructure of §2 is needed.
 7. **Should the unverified `project-reviewer` findings on #81 (§2.7.2) be re-obtained** before the shared-config work resumes?
-
----
-
-## Verification note
-
-Repo claims were read at the cited lines on 2026-07-29 at commit `baacee0`. GitHub issue and PR state was fetched from public github.com pages on 2026-07-29; this dispatch had no `mcp__github__*` or `Bash` tooling, so state was not confirmed through the GitHub API. Issue #82's acceptance-criteria checkboxes have **not** been ticked and no comment was posted, for the same reason — both require the router or user.
