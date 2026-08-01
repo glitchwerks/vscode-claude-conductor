@@ -80,9 +80,13 @@ substitutions.** No inserted lines, no removed lines, no reflow — shifted line
 silently redirect other documents' citations to the wrong text. #84 hit this
 once: the v1 session-manager design was folded into the foundational spec and
 its four line-citations rewritten to a heading anchor rather than a line
-number, specifically to stop the fragility from recurring. Prefer a heading
-anchor over a line number wherever a citation might otherwise outlive a future
-edit.
+number, specifically to stop the fragility from recurring. #94 later distilled
+that section to just the four cited quotes and removed the heading; the
+citations now point at the original v1 design spec and git history rather than
+a heading anchor, but the same discipline — don't let a restructure silently
+break a citation — is what both changes preserved. Prefer a heading anchor
+(or, once that heading is gone, an explicit git-history pointer) over a line
+number wherever a citation might otherwise outlive a future edit.
 
 ## Document shapes
 
