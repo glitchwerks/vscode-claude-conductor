@@ -1,8 +1,34 @@
+---
+title: Favorites Sidebar Section — feature spec (Issue #75)
+touches:
+  - package.json
+  - src/favoritesStore.ts
+  - src/pathExistenceCache.ts
+  - src/projectGrouping.ts
+  - src/treeView.ts
+  - src/extension.ts
+  - src/sessionManager.ts
+  - test/favoritesStore.test.ts
+  - test/favoritesProvider.test.ts
+  - test/pathExistenceCache.test.ts
+  - test/packageJsonContextKeys.test.ts
+  - test/treeView.test.ts
+  - test/sessionManager.test.ts
+  - README.md
+  - CHANGELOG.md
+skills_relevant:
+  - simplicity-first
+---
+
 # Design Spec — Favorites Sidebar Section (Issue #75)
 
-**Status:** Draft v4 (post third inquisitor review)
+**Tracking issue:** [#75 "Add Favorites section to the sidebar (manual-pinned, between Active and Recent)"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/75) — verified open, fetched 2026-08-01.
+
+**Type:** feature-spec
+
+**Status:** ACCEPTED — design locked after three inquisitor review passes (see Revision History below); implementation is underway on branch `75-favorites` (open PR #77).
+
 **Date:** 2026-04-28
-**Issue:** [#75](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/75)
 **Branch:** `75-favorites`
 
 ## Revision History
