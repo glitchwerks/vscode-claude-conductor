@@ -68,7 +68,7 @@ Every factual or judgement claim in a spec, plan, or research document must cite
 a verifiable source, inline:
 
 - a claim about this repo → `path/to/file.ts:L42-L55`, read at those exact lines
-- a claim about a GitHub issue or PR → its number, its state, and the date you checked
+- a claim about a GitHub issue or PR → its number, its state, and the date you checked (the foundational spec is exempt from the date requirement — see `docs/sdd-workflow.md` § Citing sources).
 - a claim about anything external → the URL plus `(fetched YYYY-MM-DD)`
 
 Verify **before** writing the claim, not in a cleanup pass. If you cannot verify
