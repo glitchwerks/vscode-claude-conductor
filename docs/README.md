@@ -35,7 +35,8 @@ deleted as part of #84 (D3). #94 distilled that section down to the four
 load-bearing quotes §1.3 and §1.5 actually cited, inlined them at those
 citation sites, and removed the rest (superseded by the § 2 inventory above);
 the full verbatim v1 design remains recoverable via git history. There is no
-separate row for that content; it was never a document of its own.
+separate row because the standalone document was deleted after its content
+was folded into the foundational spec.
 
 ## Plans — decisions and steps
 

@@ -15,7 +15,7 @@ skills_relevant:
 
 # Claude Conductor — Foundational Project Spec
 
-**Tracking issue:** [#82 "Author foundational project spec (problem statement + feature list) for Spec-Driven Development"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/82) — verified **open**, label `documentation`, no milestone.
+**Tracking issue:** [#82 "Author foundational project spec (problem statement + feature list) for Spec-Driven Development"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/82) — **closed**, label `documentation`, no milestone.
 
 **Type:** foundational-spec
 
@@ -29,7 +29,7 @@ Accordingly, §2 inventories **what exists and what is wanted**. It deliberately
 
 Two housekeeping subsections are folded into §2 rather than raised as new top-level sections: §2.6 (documentation discrepancies, required by #82 acceptance criterion 4) and §2.7 (roadmap). §3 lists open questions per this project's planning convention.
 
-**Citation convention.** Every claim below cites a verifiable source per `CLAUDE.md § Cite Sources in Planning Artifacts`. This document is the foundational spec — continuously maintained, not a frozen snapshot (`docs/sdd-workflow.md` § Document types: "There is exactly one") — so repo claims cite `path:Lx-Ly` without a fetch-date or commit SHA, and GitHub issue/PR claims cite the number and state (open/closed/merged) without a fetch-date: git and live GitHub queries already track when something was true, and a hand-written date would only drift from that silently. External URL citations keep their `(fetched YYYY-MM-DD)` stamp, since git does not track drift on pages it doesn't host. Anything not verified is prefixed `unverified:`.
+**Citation convention.** Every claim below cites a verifiable source per `CLAUDE.md § Citing sources`. This document is the foundational spec — continuously maintained, not a frozen snapshot (`docs/sdd-workflow.md` § Document types: "There is exactly one") — so repo claims cite `path:Lx-Ly` without a fetch-date or commit SHA, and GitHub issue/PR claims cite the number and state (open/closed/merged) without a fetch-date: git and live GitHub queries already track when something was true, and a hand-written date would only drift from that silently. External URL citations keep their `(fetched YYYY-MM-DD)` stamp, since git does not track drift on pages it doesn't host. Anything not verified is prefixed `unverified:`.
 
 ---
 
@@ -60,9 +60,9 @@ Two structural details sharpen the audience:
 
 The project's answer is to **promote each Claude session from a panel terminal to a first-class editor tab**, so sessions inherit the window-management affordances VS Code already gives code files: *"you can tile them, pin them, and glance at multiple sessions at once like you would with code files"* (`README.md:L32`).
 
-This was a deliberate v1 design decision, not an accident of implementation. The v1 session-manager design spec records it as *"Promote terminals to editor tabs... This gives each session visual parity with code files and supports the tab-per-project mental model"* (the original v1 design spec, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history), implemented via `workbench.action.terminal.moveToEditor` (`src/sessionManager.ts:L108`).
+This was a deliberate v1 design decision, not an accident of implementation. The v1 session-manager design spec records it as *"Promote terminals to editor tabs... This gives each session visual parity with code files and supports the tab-per-project mental model"* (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`, added in commit `5762838ca2e35538f6dbaffcc280a23c557f3342`, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history), implemented via `workbench.action.terminal.moveToEditor` (`src/sessionManager.ts:L108`).
 
-The same spec records **why launching must go through a terminal at all**, which is the constraint that gives this project a reason to exist separate from Anthropic's own extension: *"The Claude Code VS Code extension commands (`claude-vscode.editor.open` etc.) don't accept a folder argument — they always scope to the current workspace. Terminal with `cwd` is the only way to target a different folder without switching workspaces"* (the original v1 design spec, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history).
+The same spec records **why launching must go through a terminal at all**, which is the constraint that gives this project a reason to exist separate from Anthropic's own extension: *"The Claude Code VS Code extension commands (`claude-vscode.editor.open` etc.) don't accept a folder argument — they always scope to the current workspace. Terminal with `cwd` is the only way to target a different folder without switching workspaces"* (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`, added in commit `5762838ca2e35538f6dbaffcc280a23c557f3342`, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history).
 
 That single sentence is the project's foundation. **The official tooling is single-workspace-scoped; the problem is inherently multi-project.** Conductor exists to close that gap.
 
@@ -81,10 +81,10 @@ Two properties of this approach are load-bearing and belong in the problem state
 
 The problem statement is bounded. These are stated limitations of the current product, not unsolved bugs:
 
-- **Single-window scope.** *"Session tracking only works within a single VS Code window (sessions in other windows aren't visible in the sidebar)"* (`README.md:L120`); the v1 spec placed "Multi-window session tracking" out of scope from the start (the original v1 design spec, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history).
+- **Single-window scope.** *"Session tracking only works within a single VS Code window (sessions in other windows aren't visible in the sidebar)"* (`README.md:L120`); the v1 spec placed "Multi-window session tracking" out of scope from the start (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`, added in commit `5762838ca2e35538f6dbaffcc280a23c557f3342`, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history).
 - **Idle threshold is not tunable.** The notification fires on *"Claude Code's built-in ~60-second idle threshold — not tunable from the extension"* (`README.md:L121`).
 - **No tab-level attention indicator.** *"VS Code terminal tabs cannot change color or flash after creation"*, so attention is signalled via sidebar icons and notifications instead (`README.md:L122`).
-- **No programmatic interaction with sessions.** Sending prompts, or reading conversation history, was placed out of scope in v1 (the original v1 design spec, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history). Conductor orchestrates sessions; it does not talk to them.
+- **No programmatic interaction with sessions.** Sending prompts, or reading conversation history, was placed out of scope in v1 (`docs/superpowers/specs/2026-04-14-session-manager-v1-design.md`, added in commit `5762838ca2e35538f6dbaffcc280a23c557f3342`, folded into this document by #84 (D3) and since distilled by #94; full text recoverable via git history). Conductor orchestrates sessions; it does not talk to them.
 
 ---
 
@@ -255,5 +255,5 @@ These were not in the original inventory but are open issues that belong in a fo
 3. **How should D-1 be resolved — in which direction?** Lowering the manifest floor to 1.85 and raising the README to 1.93 are both "fixes," but they are opposite product decisions. The `1.93` floor is what makes the shell-integration fast path available (`src/sessionManager.ts:L126-130`; shell integration is stable since 1.93 per `docs/research/2026-07-29-vscode-claude-conductor-landscape-survey.md:L129`), which argues for correcting the README rather than the manifest. **⚠️ Confirmation needed** — this is a compatibility decision, not a doc typo.
 4. **Should the roadmap in §2.7 be ranked?** It is currently grouped by theme, not priority. #82 does not ask for sequencing, but every item there eventually needs an order, and #44's outcome dominates the sequencing of §2.7.1 and §2.7.2 both.
 5. **Is PR #77 intended to merge as-is, or be superseded?** It is open and unmerged while #78 and #79 describe defects on the surface it introduces. Whether those are fixed inside #77 or after it changes what §2.7.3 should say.
-6. **RESOLVED (#84, open): per-feature specs anchored by this foundational spec.** ~~Does "Spec-Driven Development" here mean a spec per feature, or one living spec?~~ This document remains the durable foundation; per-feature specs reference it rather than restating it. The convention is documented at `docs/sdd-workflow.md`. No restructure of §2 is needed.
+6. **RESOLVED (#84, closed): per-feature specs anchored by this foundational spec.** ~~Does "Spec-Driven Development" here mean a spec per feature, or one living spec?~~ This document remains the durable foundation; per-feature specs reference it rather than restating it. The convention is documented at `docs/sdd-workflow.md`. No restructure of §2 is needed.
 7. **Should the unverified `project-reviewer` findings on #81 (§2.7.2) be re-obtained** before the shared-config work resumes?

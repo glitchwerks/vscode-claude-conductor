@@ -196,7 +196,17 @@ carries no `## Verification note` section (see the spec template above): that
 section records a point-in-time read, which is exactly what a continuously
 maintained document should not imply about itself. This carve-out applies to that one
 document; every other spec and plan in this repo follows the table as
-written.
+written. The same carve-out applies to the foundational spec's own
+`**Tracking issue:**` header line (§ Header lines above): the `— verified
+<open|closed>, body fetched <YYYY-MM-DD>` template is the default for every
+other spec and plan, but on the foundational spec that line drops both
+`verified` and the dated `body fetched` clause for the same reason — a live
+GitHub query already tells you the current state, and a hand-written date
+only drifts from it. `CLAUDE.md § Citing sources` states the general rule
+("its number, its state, and the date you checked") that this document
+elaborates; where the two appear to disagree on the foundational spec
+specifically, this carve-out is the authoritative elaboration, not a
+contradiction of CLAUDE.md's default.
 
 **Verify before you write the claim, not after.** A post-hoc pass normalises
 errors ("the citation backs the sentence I already wrote") instead of catching
@@ -243,7 +253,7 @@ the content now lives inside the document that was already citing it, and
 those four citations were rewritten to reference `§1.6` by heading instead of
 by line number.
 
-#94 distilled that further. The bulk of §1.6 — the Activity Bar/Sidebar spec,
+Issue `#94` distilled that further. The bulk of §1.6 — the Activity Bar/Sidebar spec,
 Quick-Pick Launcher, Terminal-as-Editor-Tab design, Status Bar, Active Session
 Detection, Terminal Link Provider, Keyboard Navigation, the old configuration
 schema, Extension Activation, the commands table, and the file structure — was
