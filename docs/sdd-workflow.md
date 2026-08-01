@@ -12,11 +12,29 @@ them by hand.
 
 ```text
 research  →  scoping decision  →  spec  →  implementation plan  →  code
-(optional)   (optional)           (required for behaviour changes)
+(optional)   (optional*)          (required for behaviour changes)
 ```
 
+\* Required, not optional, for pathfinding spikes whose output is a
+recommendation or decision — see below.
+
 Only the spec is mandatory, and only for the changes `CLAUDE.md` § Spec-Driven
-Development lists. The other three stages exist for work that needs them.
+Development lists. The scoping decision is also mandatory, but only for
+pathfinding spikes as described below (#92). Research and the implementation
+plan remain optional, for work that needs them.
+
+**Pathfinding spikes that produce a recommendation require a scoping-decision
+plan doc.** An issue whose entire deliverable is a recommendation or decision —
+posted as a PR comment, not shipped code — must have a companion
+`docs/plans/YYYY-MM-DD-<slug>.md` scoping-decision document recording that
+recommendation, matching #81's shape. The dividing line: does the spike
+produce a recommendation or decision that someone needs to read and act on
+later? If yes, that recommendation belongs in a plan doc, not buried in a PR
+comment thread. A spike whose output is purely diagnostic — root cause found,
+fix carved out to a follow-up issue, nothing left to decide — remains exempt,
+as #68 is. This applies going forward, to any spike that has not yet posted
+its recommendation, including currently-open ones; already-closed spikes are
+not revisited.
 
 **Research is an input, never a decision.** A ranked shortlist of prior art reads
 like a recommendation and is not one. Every finding a spec relies on must be
@@ -27,7 +45,7 @@ re-stated in the spec with its own citation.
 | Type | Path | Purpose | Frontmatter |
 |---|---|---|---|
 | `research` | `docs/research/YYYY-MM-DD-<slug>.md` | External prior art: what already exists outside this repo. | None (see below) |
-| `scoping-decision` | `docs/plans/YYYY-MM-DD-<slug>.md` | Open decisions with options and consequences, written when a spec cannot yet be finalised. Not an implementation plan. | Required |
+| `scoping-decision` | `docs/plans/YYYY-MM-DD-<slug>.md` | Open decisions with options and consequences, written when a spec cannot yet be finalised — required, not optional, for a pathfinding spike whose output is a recommendation (#92). Not an implementation plan. | Required |
 | `foundational-spec` | `docs/specs/YYYY-MM-DD-<slug>.md` | The durable project-wide problem statement, audience, and inventory. There is exactly one, and per-feature specs reference it rather than restating it. | Required |
 | `feature-spec` | `docs/specs/YYYY-MM-DD-<slug>.md` | What one feature must do and why. Requirements, not steps. | Required |
 | `implementation-plan` | `docs/plans/YYYY-MM-DD-<slug>.md` | Ordered, executable steps derived from an accepted spec. | Required |
