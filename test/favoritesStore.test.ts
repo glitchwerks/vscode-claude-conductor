@@ -234,5 +234,50 @@ describe("FavoritesStore", () => {
         "two concurrent add() calls for the same canonical path must not both persist a duplicate"
       ).toHaveLength(1);
     });
+
+    // Per the PR #77 architecture note: "each add/remove/relocate awaits the
+    // prior persist (success or rollback) before snapshotting, eliminating
+    // cascade-rollback bugs." The existing "persist failure rolls back
+    // exactly one mutation" test above only exercises this sequentially —
+    // it fully awaits add("C:/A")'s rollback before starting add("C:/B").
+    // This test starts both mutations before the first persist has settled,
+    // to prove the serialization contract also holds under genuine overlap.
+    it("a later-resolving persist failure for an earlier mutation does not clobber a successfully-persisted later mutation", async () => {
+      const m = makeMemento();
+      let callCount = 0;
+      let rejectFirstUpdate: ((err: Error) => void) | undefined;
+      m.update = vi.fn(() => {
+        callCount++;
+        if (callCount === 1) {
+          // Defer indefinitely — this call has neither resolved nor rejected
+          // by the time both add() calls below have been started.
+          return new Promise<void>((_, reject) => {
+            rejectFirstUpdate = reject;
+          });
+        }
+        return Promise.resolve();
+      });
+
+      const s = new FavoritesStore(m);
+
+      // Start both mutations before the first persist (for "C:/A") settles.
+      const p1 = s.add("C:/A");
+      const p2 = s.add("C:/B");
+
+      // Let "C:/B" finish its own (immediately-resolving) persist first.
+      await p2;
+
+      // Now fail the still-pending first persist for "C:/A" and let its
+      // rollback run.
+      expect(rejectFirstUpdate, "the deferred first update() must have been invoked before add(\"C:/B\") resolved").toBeDefined();
+      rejectFirstUpdate!(new Error("simulated persist failure"));
+      await p1;
+      await s.waitForIdle();
+
+      expect(
+        s.list(),
+        "the await-prior-then-apply contract means \"C:/B\" was applied on top of \"C:/A\"'s in-flight (not-yet-settled) state; \"C:/A\"'s later rollback must only undo \"C:/A\", not clobber \"C:/B\"'s already-persisted entry back to the pre-\"C:/A\" snapshot"
+      ).toEqual([{ path: "C:/B" }]);
+    });
   });
 });

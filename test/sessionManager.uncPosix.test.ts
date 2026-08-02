@@ -39,6 +39,7 @@ vi.mock("vscode", async () => {
 });
 
 import { SessionManager } from "../src/sessionManager";
+import * as vscodeMock from "./mocks/vscode";
 
 describe("launchSession — UNC forward-slash form survives normalize() (Cluster C, critical)", () => {
   beforeEach(() => {
@@ -50,6 +51,35 @@ describe("launchSession — UNC forward-slash form survives normalize() (Cluster
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  it("passes the raw (un-normalized) network path as the terminal cwd, not path.normalize()'s output", async () => {
+    // path.normalize("//server/share/foo") collapses the leading "//" down to
+    // a single "/" under the posix semantics this file forces (see the
+    // vi.mock("path") block above) — "/server/share/foo". If launchSession
+    // hands that normalized string to vscode.window.createTerminal as `cwd`,
+    // the terminal opens in the wrong (or a nonexistent) directory for UNC
+    // targets. The raw, un-normalized folderPath must survive through to
+    // `cwd` for any path isLikelyNetworkPath() recognizes.
+    const rawNetworkPath = "//server/share/foo";
+
+    const sm = new SessionManager();
+    const r = await sm.launchSession(rawNetworkPath);
+    expect(r.ok).toBe(true);
+
+    const createTerminalMock = vi.mocked(vscodeMock.window.createTerminal);
+    expect(
+      createTerminalMock,
+      "createTerminal must be called exactly once for a fresh launch"
+    ).toHaveBeenCalledTimes(1);
+
+    const options = createTerminalMock.mock.calls[0][0] as { cwd?: unknown };
+    expect(
+      options.cwd,
+      `cwd passed to createTerminal must equal the raw network path ${JSON.stringify(rawNetworkPath)}, not a path.normalize()'d form — got ${JSON.stringify(options.cwd)}`
+    ).toBe(rawNetworkPath);
+
+    sm.dispose();
+  }, 10_000);
 
   it("skips the fs.existsSync pre-flight for a forward-slash UNC path, even after path.normalize", async () => {
     // If the network-path check is defeated by normalize(), launchSession
