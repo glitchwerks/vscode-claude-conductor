@@ -4,13 +4,17 @@ import * as os from "os";
 import * as fs from "fs";
 import { SessionManager } from "./sessionManager";
 import { getAllFolders } from "./folderSource";
+import { PathExistenceCache } from "./pathExistenceCache";
 
 interface SessionPickItem extends vscode.QuickPickItem {
   folderPath: string;
   isActiveSession: boolean;
 }
 
-export async function showQuickPick(sessionManager: SessionManager): Promise<void> {
+export async function showQuickPick(
+  sessionManager: SessionManager,
+  existenceCache: PathExistenceCache
+): Promise<void> {
   const activeSessions = sessionManager.activeSessions;
   const folders = await getAllFolders();
 
@@ -78,7 +82,10 @@ export async function showQuickPick(sessionManager: SessionManager): Promise<voi
     }
   } else {
     const result = await sessionManager.launchSession(picked.folderPath);
-    if (!result.ok && result.reason === "missing") {
+    if (result.ok) {
+      existenceCache.markPresent(picked.folderPath);
+    } else if (result.reason === "missing") {
+      existenceCache.markMissing(picked.folderPath);
       void vscode.window.showErrorMessage(result.message);
     }
   }

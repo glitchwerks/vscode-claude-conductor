@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import { getClaudeCommand, getReuseTerminal, getLaunchDelayMs } from "./config";
 import { log, debugLog } from "./output";
+import { isLikelyNetworkPath } from "./networkPath";
 
 /** Prefix used for all Claude session terminal names */
 export const SESSION_NAME_PREFIX = "claude · ";
@@ -16,15 +17,6 @@ export const SESSION_NAME_PREFIX = "claude · ";
 export type LaunchResult =
   | { ok: true; reused: boolean }
   | { ok: false; reason: "missing" | "other"; message: string };
-
-/**
- * Returns true for UNC paths (\\server\share) and forward-slash equivalents
- * (//server/share). Sync fs.existsSync can hang on SMB timeouts for these
- * paths, so the pre-flight existence check is skipped for them.
- */
-function isLikelyNetworkPath(p: string): boolean {
-  return p.startsWith("\\\\") || p.startsWith("//");
-}
 
 const STATE_DIR = path.join(os.homedir(), ".claude", "session-state");
 
@@ -105,7 +97,7 @@ export class SessionManager implements vscode.Disposable {
     //
     // Skip the pre-flight for UNC paths — sync existsSync can hang on SMB
     // timeouts for \\server\share paths, making the guard counterproductive.
-    if (!isLikelyNetworkPath(normalized)) {
+    if (!isLikelyNetworkPath(folderPath)) {
       if (!fs.existsSync(normalized)) {
         log(`[launch] skipping — cwd does not exist: ${normalized}`);
         return {

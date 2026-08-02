@@ -15,6 +15,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import { canonicalKey } from "./pathCanonical";
+import { isLikelyNetworkPath } from "./networkPath";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -45,11 +46,6 @@ const STAT_TIMEOUT_MS = 500;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Returns true for UNC paths (\\server\share or //server/share). */
-function isLikelyNetworkPath(p: string): boolean {
-  return p.startsWith("\\\\") || p.startsWith("//");
-}
-
 /**
  * Stat a path with a hard timeout.
  * Resolves to: true=exists, false=missing, null=timed out (cache left unchanged).
@@ -68,7 +64,13 @@ function statWithTimeout(p: string): Promise<boolean | null> {
       if (settled) return;
       settled = true;
       clearTimeout(t);
-      resolve(err === null);
+      if (err === null) {
+        resolve(true);
+      } else if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        resolve(false);
+      } else {
+        resolve(null);
+      }
     });
   });
 }
@@ -155,9 +157,9 @@ export class PathExistenceCache {
     const toCheck = paths.filter(p => !isLikelyNetworkPath(p));
     let anyChange = false;
 
-    for (const p of toCheck) {
+    await Promise.all(toCheck.map(async p => {
       const result = await stat(p);
-      if (result === null) continue; // timeout — leave cache alone
+      if (result === null) return; // timeout or non-ENOENT error — leave cache alone
       const key = canonicalKey(p);
       const prev = this.cache.get(key);
       const next: ExistenceState = result
@@ -165,7 +167,7 @@ export class PathExistenceCache {
         : { kind: "missing", checkedAt: Date.now() };
       this.cache.set(key, next);
       if (!prev || prev.kind !== next.kind) anyChange = true;
-    }
+    }));
 
     if (anyChange) this._onDidChange.fire({ kind: "broad" });
   }

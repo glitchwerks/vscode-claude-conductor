@@ -23,6 +23,12 @@ export interface MutationResult {
   reason?: string;
 }
 
+function isFavoritesEntry(value: unknown): value is FavoritesEntry {
+  return typeof value === "object"
+    && value !== null
+    && typeof (value as { path?: unknown }).path === "string";
+}
+
 /** Pure read; no write side effects. v1 string[] is converted in-memory only. */
 function readWithoutMigrating(memento: vscode.Memento): {
   entries: FavoritesEntry[];
@@ -34,20 +40,24 @@ function readWithoutMigrating(memento: vscode.Memento): {
     if (raw.length === 0) return { entries: [], unknownVersion: false };
     if (typeof raw[0] === "string") {
       return {
-        entries: (raw as string[]).map(p => ({ path: p })),
+        entries: raw.filter((p): p is string => typeof p === "string")
+          .map(p => ({ path: p })),
         unknownVersion: false,
       };
     }
-    return { entries: raw as FavoritesEntry[], unknownVersion: false };
+    return { entries: raw.filter(isFavoritesEntry), unknownVersion: false };
   }
   if (typeof raw === "object" && raw !== null && "version" in raw) {
     const env = raw as FavoritesStorageEnvelope;
     if (env.version === 2) {
-      return { entries: Array.isArray(env.entries) ? env.entries : [], unknownVersion: false };
+      return {
+        entries: Array.isArray(env.entries) ? env.entries.filter(isFavoritesEntry) : [],
+        unknownVersion: false,
+      };
     }
     const maybeEntries = (env as { entries?: unknown }).entries;
     return {
-      entries: Array.isArray(maybeEntries) ? maybeEntries as FavoritesEntry[] : [],
+      entries: Array.isArray(maybeEntries) ? maybeEntries.filter(isFavoritesEntry) : [],
       unknownVersion: true,
     };
   }
@@ -71,6 +81,11 @@ export class FavoritesStore {
     this.entries = r.entries;
     this.unknownVersion = r.unknownVersion;
     this.rebuildIndex();
+    if (this.unknownVersion) {
+      void vscode.window.showWarningMessage(
+        "Favorites storage uses an unsupported newer version. This build will not modify it."
+      );
+    }
   }
 
   isFavorited(p: string): boolean {
@@ -91,18 +106,27 @@ export class FavoritesStore {
     if (isWorktreePath(p)) {
       return { ok: false, reason: "Favorite the project root, not a worktree." };
     }
-    if (this.isFavorited(p)) {
-      return { ok: true };
-    }
-    if (this.entries.length >= MAX_FAVORITES) {
-      return { ok: false, reason: `Favorites cap reached (${MAX_FAVORITES}). Remove an entry first.` };
-    }
-
+    let result: MutationResult = { ok: true };
+    const key = canonicalKey(p);
     await this.enqueueMutation(
-      snapshot => [...snapshot, { path: p }],
+      snapshot => {
+        if (snapshot.some(e => canonicalKey(e.path) === key)) {
+          result = { ok: true };
+          return snapshot;
+        }
+        if (snapshot.length >= MAX_FAVORITES) {
+          result = {
+            ok: false,
+            reason: `Favorites cap reached (${MAX_FAVORITES}). Remove an entry first.`,
+          };
+          return snapshot;
+        }
+        result = { ok: true };
+        return [...snapshot, { path: p }];
+      },
       { kind: "single", path: p }
     );
-    return { ok: true };
+    return result;
   }
 
   async remove(p: string): Promise<void> {
@@ -131,25 +155,32 @@ export class FavoritesStore {
       return { ok: false, reason: "That's the same path. Choose a different folder." };
     }
 
-    if (!this.keyIndex.has(oldKey)) {
-      return { ok: false, reason: "Original entry not found." };
-    }
-
-    if (this.keyIndex.has(newKey)) {
-      await this.enqueueMutation(
-        snapshot => snapshot.filter(e => canonicalKey(e.path) !== oldKey),
-        { kind: "broad" }
-      );
-      return { ok: true, reason: "That folder is already in your Favorites — removed the missing entry." };
-    }
-
+    let result: MutationResult = { ok: false, reason: "Original entry not found." };
+    let payload: FavoritesChangeEvent = { kind: "single", path: newPath };
     await this.enqueueMutation(
-      snapshot => snapshot.map(e =>
-        canonicalKey(e.path) === oldKey ? { path: newPath } : e
-      ),
-      { kind: "single", path: newPath }
+      snapshot => {
+        if (!snapshot.some(e => canonicalKey(e.path) === oldKey)) {
+          result = { ok: false, reason: "Original entry not found." };
+          payload = { kind: "broad" };
+          return snapshot;
+        }
+        if (snapshot.some(e => canonicalKey(e.path) === newKey)) {
+          result = {
+            ok: true,
+            reason: "That folder is already in your Favorites — removed the missing entry.",
+          };
+          payload = { kind: "broad" };
+          return snapshot.filter(e => canonicalKey(e.path) !== oldKey);
+        }
+        result = { ok: true };
+        payload = { kind: "single", path: newPath };
+        return snapshot.map(e =>
+          canonicalKey(e.path) === oldKey ? { path: newPath } : e
+        );
+      },
+      () => payload
     );
-    return { ok: true };
+    return result;
   }
 
   /** Test seam: expose enqueueMutation for the apply-throw test. */
@@ -162,7 +193,7 @@ export class FavoritesStore {
 
   private async enqueueMutation(
     apply: (snapshot: FavoritesEntry[]) => FavoritesEntry[],
-    payload: FavoritesChangeEvent
+    payload: FavoritesChangeEvent | (() => FavoritesChangeEvent)
   ): Promise<void> {
     await this.persistChain.catch(() => undefined);
 
@@ -177,7 +208,7 @@ export class FavoritesStore {
 
     this.entries = next;
     this.rebuildIndex();
-    this._onDidChange.fire(payload);
+    this._onDidChange.fire(typeof payload === "function" ? payload() : payload);
 
     this.persistChain = Promise.resolve(
       this.memento.update(STORAGE_KEY, { version: 2, entries: this.entries } as FavoritesStorageEnvelope)

@@ -67,7 +67,8 @@ const AUTO_LAUNCH_KEY = "claudeConductor.autoLaunchFolder";
 class SessionUriHandler implements vscode.UriHandler {
   constructor(
     private readonly sm: SessionManager,
-    private readonly globalState: vscode.Memento
+    private readonly globalState: vscode.Memento,
+    private readonly existenceCache: PathExistenceCache
   ) {}
 
   async handleUri(uri: vscode.Uri): Promise<void> {
@@ -95,7 +96,10 @@ class SessionUriHandler implements vscode.UriHandler {
 
     // Folder is already open — launch the session directly
     const result = await this.sm.launchSession(folderPath);
-    if (!result.ok && result.reason === "missing") {
+    if (result.ok) {
+      this.existenceCache.markPresent(folderPath);
+    } else if (result.reason === "missing") {
+      this.existenceCache.markMissing(folderPath);
       void vscode.window.showErrorMessage(result.message);
     }
   }
@@ -104,11 +108,12 @@ class SessionUriHandler implements vscode.UriHandler {
 export function activate(context: vscode.ExtensionContext): void {
   sessionManager = new SessionManager();
   context.subscriptions.push(sessionManager);
+  const existenceCache = new PathExistenceCache();
 
   // URI handler for cross-window launch
   context.subscriptions.push(
     vscode.window.registerUriHandler(
-      new SessionUriHandler(sessionManager, context.globalState)
+      new SessionUriHandler(sessionManager, context.globalState, existenceCache)
     )
   );
 
@@ -131,7 +136,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Tree view providers
   const favoritesStore = new FavoritesStore(context.globalState);
-  const existenceCache = new PathExistenceCache();
+  void existenceCache.refresh(favoritesStore.list().map(e => e.path));
   const activeProvider = new ActiveSessionsProvider(sessionManager, favoritesStore);
   const recentProvider = new RecentProjectsProvider(sessionManager, favoritesStore, existenceCache);
   const favoritesProvider = new FavoritesProvider(favoritesStore, existenceCache);
@@ -176,7 +181,7 @@ export function activate(context: vscode.ExtensionContext): void {
           void vscode.window.showErrorMessage(result.message);
         }
       } else {
-        await showQuickPick(sessionManager);
+        await showQuickPick(sessionManager, existenceCache);
       }
     }),
 
