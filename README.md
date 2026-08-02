@@ -123,7 +123,7 @@ To remove the hooks at any time: run `Claude Conductor: Remove Notification Hook
 
 ## Requirements
 
-- VS Code 1.85 or newer
+- VS Code 1.93 or newer
 - [Claude Code CLI](https://docs.anthropic.com/claude-code) installed and on PATH
 
 ## Known Limitations

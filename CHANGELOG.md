@@ -13,6 +13,7 @@ All notable changes to the Claude Conductor extension are documented here.
   - 25-favorite soft cap; over-cap banner; per-machine `globalState` persistence
 
 ### Changed
+
 - `launchSession` now returns a `LaunchResult` (`ok: true | false` with reason) instead of `void`. Internal API; existing extension behavior unchanged.
 
 ### Fixed

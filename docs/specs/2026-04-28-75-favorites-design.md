@@ -44,9 +44,9 @@ skills_relevant:
 
 ## Summary
 
-Add a third top-level tree view, **Favorites**, to the Claude Conductor sidebar. It sits between **Active Sessions** and **Recent Projects** and renders user-pinned project roots, reusing the existing two-level grouping helper so worktrees nest under their parent project exactly as they do in Recent Projects today.
+Add a third top-level tree view, **Favorites**, to the Claude Conductor sidebar. It sits between **Active Sessions** and **Recent Projects** and renders user-pinned project roots, reusing the existing two-level grouping helper (`groupByProjectRoot`, `src/projectGrouping.ts:L99`) so worktrees nest under their parent project exactly as they do in Recent Projects today.
 
-Favorites is a **manual curation overlay**, not a usage tracker. Pinning a project does not affect Recent Projects (parallel lists). Favoriting is per-machine via `globalState`. There is no auto-frequency tracking and no Settings Sync involvement in v1.
+Favorites is a **manual curation overlay**, not a usage tracker. Pinning a project does not affect Recent Projects (parallel lists). Favoriting is per-machine via `globalState` (`FavoritesStore` constructed from `context.globalState`, `src/extension.ts:L133`). There is no auto-frequency tracking and no Settings Sync involvement in v1 (no `setKeysForSync` call anywhere under `src/`, verified by repo-wide search, checked 2026-08-01).
 
 ## Goals
 
