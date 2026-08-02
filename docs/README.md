@@ -24,7 +24,7 @@ Directory: `specs/`
 
 | Document | Type | Status | Issue |
 |---|---|---|---|
-| [`2026-07-29-foundational-project-spec.md`](specs/2026-07-29-foundational-project-spec.md) | foundational-spec | DRAFT | #82 |
+| [`2026-07-29-foundational-project-spec.md`](specs/2026-07-29-foundational-project-spec.md) | foundational-spec | ACCEPTED | #82 |
 
 The foundational spec is the durable anchor: problem statement, audience,
 feature inventory, and roadmap. Per-feature specs reference it rather than
