@@ -119,7 +119,7 @@ export class SessionManager implements vscode.Disposable {
     const folderName = path.basename(normalized);
     const terminal = vscode.window.createTerminal({
       name: `${SESSION_NAME_PREFIX}${folderName}`,
-      cwd: normalized,
+      cwd: isLikelyNetworkPath(folderPath) ? folderPath : normalized,
       iconPath: new vscode.ThemeIcon("sparkle"),
       color: new vscode.ThemeColor("terminal.ansiGreen"),
     });

@@ -42,8 +42,9 @@ function resolveSession(arg: unknown): ActiveSession | undefined {
  * Normalizes the argument passed to a favorites command.
  *
  * Favorites commands may be invoked with a plain string path (programmatic calls),
- * a TreeItem-shaped object whose `.folderPath` or `.path` exposes the path (inline
- * action buttons and context-menu entries), or `undefined` (Command Palette).
+ * a TreeItem-shaped object whose `.folderPath`, `.path`, or `.group.root` exposes
+ * the path (inline action buttons and context-menu entries), or `undefined`
+ * (Command Palette).
  */
 function resolvePathArg(arg: unknown): string | undefined {
   if (typeof arg === "string") return arg;
@@ -51,6 +52,10 @@ function resolvePathArg(arg: unknown): string | undefined {
     const obj = arg as Record<string, unknown>;
     if (typeof obj.folderPath === "string") return obj.folderPath;
     if (typeof obj.path === "string") return obj.path;
+    if (obj.group && typeof obj.group === "object") {
+      const group = obj.group as Record<string, unknown>;
+      if (typeof group.root === "string") return group.root;
+    }
   }
   return undefined;
 }
@@ -171,8 +176,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Commands
   context.subscriptions.push(
-    vscode.commands.registerCommand("claudeConductor.openSession", async (folderPath?: string) => {
-      if (typeof folderPath === "string") {
+    vscode.commands.registerCommand("claudeConductor.openSession", async (arg?: unknown) => {
+      const folderPath = resolvePathArg(arg);
+      if (folderPath !== undefined) {
         const result = await sessionManager.launchSession(folderPath);
         if (result.ok) {
           existenceCache.markPresent(folderPath);
