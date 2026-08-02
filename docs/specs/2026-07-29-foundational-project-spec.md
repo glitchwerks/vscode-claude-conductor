@@ -248,10 +248,10 @@ These were not in the original inventory but are open issues that belong in a fo
 
 #### 2.7.5 SDD-conformance follow-ups — #91 / #96
 
-These are documentation-process defects, not product functionality, but are tracked here alongside the rest of the open-issue roster rather than in a separate list.
+These are documentation-process defects, not product functionality, but are tracked here alongside the rest of the §2.7 roster rather than in a separate list.
 
-- **[#91](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/91)** (open) — PR #77 (§2.7.3) ships its favorites spec and plan under the deprecated `docs/superpowers/{specs,plans}/` tree that #84 eliminated; fix before merge by moving both docs to `docs/specs/`/`docs/plans/` and retrofitting the header-line contract.
-- **[#96](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/96)** (open) — opened against a doc snapshot that predated #93: `docs/sdd-workflow.md § Document types` and § The pipeline now carry the pathfinding-spike plan-doc mandate #92 was supposed to add (landed via #93, merged after #96's audit). The gap #96 describes is already closed in the doc; the issue itself remains open pending confirmation/closure.
+- **[#91](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/91)** (open) — **[PR #77](https://github.com/cbeaulieu-gt/vscode-claude-conductor/pull/77)** (§2.7.3, open) originally contained its favorites spec and plan under the deprecated `docs/superpowers/{specs,plans}/` tree that **[PR #85](https://github.com/cbeaulieu-gt/vscode-claude-conductor/pull/85)** (merged, closed **[#84](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/84)**) eliminated; commit `0d5afff` on #77's branch (`75-favorites`) has since relocated both docs to `docs/specs/`/`docs/plans/` and retrofitted the header-line contract, but #91 stays open until #77 merges.
+- **[#96](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/96)** (closed) — opened against a doc snapshot that predated **[#93](https://github.com/cbeaulieu-gt/vscode-claude-conductor/pull/93)** (merged): `docs/sdd-workflow.md § Document types` now carries the pathfinding-spike plan-doc mandate that **[#92](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/92)** (closed) called for. #96 was filed against a stale local `main` during the audit that produced it; closed as invalid once verified against current `main`, per its own closing comment.
 
 ---
 
