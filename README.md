@@ -32,7 +32,7 @@ A curated list of project roots you've pinned for quick access. Sits between Act
 - **Capacity:** soft cap of 25 favorites. Adding a 26th is rejected with a toast. If storage drift produces more than 25 entries, the panel shows a banner above the tree and renders all entries (no silent truncation).
 - **Persistence:** per-machine via VS Code's `globalState`. Favorites do not sync between machines (intentional — see Known Limits).
 
-Both panels render as a **two-level tree**: project roots are collapsed by default (showing a child count), with their `.worktrees/<branch>` subdirectories nested underneath. When a worktree's parent project root is not present in Recent Projects, the group row is shown with a dimmed folder icon and a "(not in recents)" label so you can tell at a glance that the root itself isn't tracked.
+Recent Projects renders as a **two-level tree**: project roots are collapsed by default (showing a child count), with their `.worktrees/<branch>` subdirectories nested underneath. When a worktree's parent project root is not present in Recent Projects, the group row is shown with a dimmed folder icon and a "(not in recents)" label so you can tell at a glance that the root itself isn't tracked. Favorites, by contrast, renders as a **flat, single-level list** — each favorited project root is its own row with no nested children, since only project roots (not worktrees) can be favorited.
 
 ### Quick-Pick Launcher
 
