@@ -189,7 +189,7 @@ export class FavoritesStore {
 
 **Why "await prior, then apply":** the v3 design chained mutations and on rejection restored the *first* failing mutation's snapshot, which clobbered later in-memory mutations that had already been applied speculatively. The v4 design serializes mutations end-to-end: each waits for the prior persist's resolution (success → entries reflect the success; rollback → entries reflect the rollback) before snapshotting. There is no speculative state. A persist failure rolls back exactly one mutation and toasts exactly once.
 
-**Trade-off:** rapid mutations are now strictly serial — clicking the star 5 times in 100ms means 5 persists serialized one after the other. With `MAX_FAVORITES = 25` and `globalState.update` typically completing in <10ms locally, total worst-case latency is ~50ms for a burst of 5. Acceptable.
+**Trade-off:** rapid mutations are now strictly serial — clicking the star 5 times in 100ms means 5 persists serialized one after the other. With `MAX_FAVORITES = 25` and unverified: `globalState.update` typically completes in <10ms locally, total worst-case latency is ~50ms for a burst of 5. Acceptable.
 
 ### Canonical Key
 
@@ -418,7 +418,7 @@ When the existence cache reports `missing` (fresh or stale) for a row's path:
 The 25-cap is enforced only at `addFavorite`. If storage drifts past 25 (multi-window race, manual edit, future migration bug), the render path:
 
 - **Renders all entries**, sorted alphabetically. No truncation, no silent hiding.
-- **Displays a panel header banner** above the tree: `"Favorites: N entries (over the 25 cap — consider removing some)"`. Implemented via `TreeView.message` (the supported VS Code API for this — text shown above tree contents).
+- **Displays a panel header banner** above the tree: `"Favorites: N entries (over the 25 cap — consider removing some)"`. Implemented via `TreeView.message`, the supported VS Code API for rendering a message in the view (https://code.visualstudio.com/api/extension-guides/tree-view, fetched 2026-08-02); unverified: the docs describe the message as "rendered in the view" without stating explicitly that it appears above tree contents, though that matches observed VS Code UI behavior.
 - Subsequent `addFavorite` calls continue to reject with the cap toast.
 
 Rationale: silent truncation is data hiding. Showing all entries with a banner makes the over-cap state user-visible and self-correcting (the user removes some, the banner clears). The 25-cap is preserved as a soft policy on adds, not as a render-time invariant.

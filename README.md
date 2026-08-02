@@ -136,7 +136,7 @@ To remove the hooks at any time: run `Claude Conductor: Remove Notification Hook
 
 - **Favorites paths are tracked as you typed them.** Two distinct path strings that resolve to the same folder via symlinks or junctions produce duplicate entries.
 - **UNC shares (`\\server\share`):** these render as present in the panel until you actually launch a session. If the share is offline, the launch will fail and the row will dim afterward. The next successful launch flips it back to present.
-- **Multi-window writes:** if you mutate Favorites in two VS Code windows simultaneously, the last write wins. The list is bounded (25 entries) and mutation rate is low, so collisions are unlikely in practice. Settings Sync is intentionally not enabled.
+- **Multi-window writes:** if you mutate Favorites in two VS Code windows simultaneously, the last write wins. The normal cap is 25 entries, but storage drift can exceed it, and mutation rate is low, so collisions are unlikely in practice. Settings Sync is intentionally not enabled.
 
 ## Contributing / Development
 
