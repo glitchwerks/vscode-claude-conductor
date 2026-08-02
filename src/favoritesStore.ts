@@ -206,6 +206,13 @@ export class FavoritesStore {
       throw err;
     }
 
+    const snapshotKeys = new Set(snapshot.map(e => canonicalKey(e.path)));
+    const nextKeys = new Set(next.map(e => canonicalKey(e.path)));
+    const addedKeys = new Set(
+      next.map(e => canonicalKey(e.path)).filter(key => !snapshotKeys.has(key))
+    );
+    const removedEntries = snapshot.filter(e => !nextKeys.has(canonicalKey(e.path)));
+
     this.entries = next;
     this.rebuildIndex();
     this._onDidChange.fire(typeof payload === "function" ? payload() : payload);
@@ -215,7 +222,16 @@ export class FavoritesStore {
     )
       .then(() => undefined)
       .catch((err: unknown) => {
-        this.entries = snapshot;
+        const rolledBack = this.entries.filter(e => !addedKeys.has(canonicalKey(e.path)));
+        const rolledBackKeys = new Set(rolledBack.map(e => canonicalKey(e.path)));
+        for (const entry of removedEntries) {
+          const key = canonicalKey(entry.path);
+          if (!rolledBackKeys.has(key)) {
+            rolledBack.push(entry);
+            rolledBackKeys.add(key);
+          }
+        }
+        this.entries = rolledBack;
         this.rebuildIndex();
         this._onDidChange.fire({ kind: "broad" });
         const msg = err instanceof Error ? err.message : String(err);
