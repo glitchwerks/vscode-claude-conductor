@@ -19,7 +19,7 @@ skills_relevant:
 
 **Type:** foundational-spec
 
-**Status:** DRAFT — awaiting user review.
+**Status:** ACCEPTED — living document, revised in place rather than superseded.
 
 ## Scope of this document
 
@@ -245,6 +245,13 @@ These were not in the original inventory but are open issues that belong in a fo
 - **[#80](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/80)** (open) — rename (alias), delete, and bulk-select for sidebar sessions and folders. Prompted by competitor research: the closest actively-maintained competitor ships rename/delete/bulk-selection UX that Conductor lacks (`docs/research/2026-07-29-vscode-claude-conductor-landscape-survey.md:L59`).
 - **[#72](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/72)** (open) — auto-launch a Claude session after Add Folder.
 - **[#46](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/46)** (open) — surface active-session count on grouped project rows, and explore a broader structural shift.
+
+#### 2.7.5 SDD-conformance follow-ups — #91 / #96
+
+These are documentation-process defects, not product functionality, but are tracked here alongside the rest of the open-issue roster rather than in a separate list.
+
+- **[#91](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/91)** (open) — PR #77 (§2.7.3) ships its favorites spec and plan under the deprecated `docs/superpowers/{specs,plans}/` tree that #84 eliminated; fix before merge by moving both docs to `docs/specs/`/`docs/plans/` and retrofitting the header-line contract.
+- **[#96](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/96)** (open) — opened against a doc snapshot that predated #93: `docs/sdd-workflow.md § Document types` and § The pipeline now carry the pathfinding-spike plan-doc mandate #92 was supposed to add (landed via #93, merged after #96's audit). The gap #96 describes is already closed in the doc; the issue itself remains open pending confirmation/closure.
 
 ---
 
