@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Memento } from "vscode";
+import * as vscodeMock from "./mocks/vscode";
 import { FavoritesStore, MAX_FAVORITES } from "../src/favoritesStore";
 
 function makeMemento(initial?: unknown): Memento & { _data: Record<string, unknown>; updateCalls: unknown[] } {
@@ -145,5 +146,93 @@ describe("FavoritesStore", () => {
 
     expect(s.list()).toEqual([{ path: "C:/seed" }]);
     expect(eventsBefore).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------
+  // Cluster D — validation & concurrency (PR #77 CodeRabbit findings 10-12, 20)
+  // ---------------------------------------------------------------------
+
+  describe("malformed persisted data (finding 10)", () => {
+    it("v2 envelope with a null entry does not crash rebuildIndex — invalid entries are filtered out", () => {
+      const m = makeMemento({
+        version: 2,
+        entries: [null, { path: "C:/ok" }, "not-an-object", { path: 123 }],
+      });
+
+      let s: FavoritesStore | undefined;
+      expect(() => {
+        s = new FavoritesStore(m);
+      }, "constructing FavoritesStore over malformed entries must not throw").not.toThrow();
+
+      expect(s!.list()).toEqual([{ path: "C:/ok" }]);
+    });
+
+    it("legacy mixed-type v1 array does not crash and filters non-string entries", () => {
+      const m = makeMemento(["C:/legacy-good", null, 42]);
+
+      let s: FavoritesStore | undefined;
+      expect(() => {
+        s = new FavoritesStore(m);
+      }, "constructing FavoritesStore over a mixed-type legacy array must not throw").not.toThrow();
+
+      expect(s!.list()).toEqual([{ path: "C:/legacy-good" }]);
+    });
+  });
+
+  describe("unsupported storage version warning (finding 11)", () => {
+    it("shows a user-visible warning when the persisted envelope has an unsupported future version", () => {
+      const warnSpy = vi.spyOn(vscodeMock.window, "showWarningMessage");
+      const m = makeMemento({ version: 99, entries: [{ path: "C:/futureA" }] });
+
+      new FavoritesStore(m);
+
+      expect(
+        warnSpy,
+        "loading a storage envelope with an unsupported future version must surface a user-visible warning, not just block writes silently"
+      ).toHaveBeenCalled();
+    });
+  });
+
+  describe("concurrent mutation race (finding 12, test gap finding 20)", () => {
+    it("concurrent add() calls do not push the store past MAX_FAVORITES (cap-check race)", async () => {
+      const seedEntries = Array.from({ length: MAX_FAVORITES - 1 }, (_, i) => ({
+        path: `C:/seed${i}`,
+      }));
+      const m = makeMemento({ version: 2, entries: seedEntries });
+      const s = new FavoritesStore(m);
+      expect(s.list()).toHaveLength(MAX_FAVORITES - 1);
+
+      // Both calls run their synchronous cap-check (entries.length >= MAX_FAVORITES)
+      // against the SAME pre-mutation snapshot before either awaits — validation
+      // happens before enqueueMutation, so both currently pass.
+      const p1 = s.add("C:/raceA");
+      const p2 = s.add("C:/raceB");
+      await Promise.all([p1, p2]);
+      await s.waitForIdle();
+
+      expect(
+        s.list().length,
+        "two concurrent add() calls must not both pass a stale cap check and exceed MAX_FAVORITES"
+      ).toBeLessThanOrEqual(MAX_FAVORITES);
+    });
+
+    it("concurrent add() calls for the same canonical path do not create a duplicate entry (dedup race)", async () => {
+      const m = makeMemento();
+      const s = new FavoritesStore(m);
+
+      // Both calls run their synchronous isFavorited() dedup-check against the
+      // same pre-mutation snapshot (empty) before either awaits, so both
+      // currently pass validation.
+      const p1 = s.add("C:/Proj");
+      const p2 = s.add("c:/proj");
+      await Promise.all([p1, p2]);
+      await s.waitForIdle();
+
+      const matches = s.list().filter((e) => e.path.toLowerCase() === "c:/proj");
+      expect(
+        matches,
+        "two concurrent add() calls for the same canonical path must not both persist a duplicate"
+      ).toHaveLength(1);
+    });
   });
 });

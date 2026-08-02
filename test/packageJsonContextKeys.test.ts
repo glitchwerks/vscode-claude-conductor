@@ -94,4 +94,30 @@ describe("package.json viewItem ↔ VIEW_ITEM bidirectional bijection", () => {
       }
     }
   });
+
+  // -------------------------------------------------------------------------
+  // Cluster F (PR #77 CodeRabbit finding 4): openSession must not be offered
+  // on missing rows — locateFavorite is the correct action there, since
+  // openSession rejects nonexistent directories with an error.
+  // -------------------------------------------------------------------------
+  it("openSession's view/item/context 'when' clauses exclude projectRoot.missing", () => {
+    const openSessionClauses = clauses.filter(
+      (c) => c.command === "claudeConductor.openSession" && c.when
+    );
+    expect(openSessionClauses.length).toBeGreaterThan(0); // sanity: clauses exist
+
+    for (const c of openSessionClauses) {
+      const when = c.when ?? "";
+      const literals = extractEqLiterals(when);
+      const regexes = extractRegexes(when);
+
+      const matchesMissingLiteral = literals.includes("projectRoot.missing");
+      const matchesMissingRegex = regexes.some((re) => re.test("projectRoot.missing"));
+
+      expect(
+        matchesMissingLiteral || matchesMissingRegex,
+        `openSession when-clause '${when}' must exclude projectRoot.missing — missing rows should route to locateFavorite instead, since openSession rejects nonexistent directories`
+      ).toBe(false);
+    }
+  });
 });

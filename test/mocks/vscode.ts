@@ -189,6 +189,16 @@ class StatusBarItemStub {
 }
 
 // ---------------------------------------------------------------------------
+// TreeView stub
+// ---------------------------------------------------------------------------
+
+class TreeViewStub {
+  message: string | undefined = undefined;
+  visible = true;
+  dispose = vi.fn();
+}
+
+// ---------------------------------------------------------------------------
 // window namespace
 // ---------------------------------------------------------------------------
 
@@ -223,6 +233,8 @@ export const window = {
   registerTerminalLinkProvider: vi.fn().mockReturnValue(new Disposable(() => {})),
 
   createStatusBarItem: vi.fn().mockImplementation(() => new StatusBarItemStub()),
+  createTreeView: vi.fn().mockImplementation(() => new TreeViewStub()),
+  showOpenDialog: vi.fn().mockResolvedValue(undefined),
 };
 
 // ---------------------------------------------------------------------------

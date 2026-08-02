@@ -1,9 +1,19 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Memento } from "vscode";
+
+// getAllFolders must be mockable so worktree-grouping tests (Cluster G) are
+// deterministic. Every pre-existing test in this file gets an empty default
+// via the beforeEach below, so their flat (no-worktree) rendering is
+// unaffected.
+vi.mock("../src/folderSource", () => ({
+  getAllFolders: vi.fn(),
+}));
 
 import { FavoritesStore } from "../src/favoritesStore";
 import { PathExistenceCache } from "../src/pathExistenceCache";
 import { FavoritesProvider, VIEW_ITEM } from "../src/treeView";
+import { getAllFolders } from "../src/folderSource";
+import { TreeItemCollapsibleState } from "./mocks/vscode";
 
 function makeMemento(): Memento {
   const data: Record<string, unknown> = {};
@@ -15,6 +25,10 @@ function makeMemento(): Memento {
 }
 
 describe("FavoritesProvider", () => {
+  beforeEach(() => {
+    vi.mocked(getAllFolders).mockResolvedValue([]);
+  });
+
   it("returns empty children when store has no entries", async () => {
     const store = new FavoritesStore(makeMemento());
     const cache = new PathExistenceCache();
@@ -133,5 +147,78 @@ describe("FavoritesProvider", () => {
 
     const top = await provider.getChildren();
     expect(top).toHaveLength(25);
+  });
+
+  // ---------------------------------------------------------------------
+  // Cluster G — worktree grouping (PR #77 CodeRabbit finding #3 / approved
+  // spec docs/specs/2026-04-28-75-favorites-design.md): a favorited project
+  // root with associated worktrees must render as a collapsible GROUP row
+  // with the worktree children underneath, mirroring the grouping contract
+  // RecentProjectsProvider already implements (test/treeView.test.ts).
+  // ---------------------------------------------------------------------
+  describe("worktree grouping under a favorited root", () => {
+    it("a favorited root with worktrees renders as a collapsible group; worktree children appear via getChildren(group)", async () => {
+      const root = "C:/proj";
+      const wt1 = "C:/proj/.worktrees/feature-a";
+
+      vi.mocked(getAllFolders).mockResolvedValue([
+        { folderPath: root, name: "proj", parentDir: "C:/", source: "recent" },
+        {
+          folderPath: wt1,
+          name: "feature-a",
+          parentDir: "C:/proj/.worktrees",
+          source: "recent",
+        },
+      ]);
+
+      const store = new FavoritesStore(makeMemento());
+      await store.add(root);
+      const cache = new PathExistenceCache();
+      cache.markPresent(root);
+
+      const provider = new FavoritesProvider(store, cache);
+      const top = await provider.getChildren();
+
+      expect(top).toHaveLength(1);
+      expect(
+        top[0].collapsibleState,
+        "a favorited root with worktree children must render as a Collapsed group row, not a flat leaf"
+      ).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(top[0].contextValue).toBe(VIEW_ITEM.PROJECT_ROOT_FAVORITED);
+
+      const children = await provider.getChildren(top[0]);
+      expect(
+        children.some((c) => c.label === "feature-a"),
+        "getChildren(group) must return the worktree child rows nested under the favorited root"
+      ).toBe(true);
+    });
+
+    // Guards the grouping rule this file relies on: group-wrap ONLY when
+    // getAllFolders() actually yields worktree children for the root.
+    // Without this guard, an implementation that mirrors
+    // RecentProjectsProvider literally (which ALWAYS group-wraps, even a
+    // single non-worktree entry — see treeView.test.ts "single session with
+    // no worktrees still returns a group with 1 child") would pass the test
+    // above but break every other assertion in this file that expects a
+    // flat FavoriteLeafItem (exact "(missing)" description with no count
+    // prefix, the locateFavorite command, etc.) — this is currently green
+    // and must stay green.
+    it("a favorited root with no worktrees stays a flat leaf row (no group wrapper)", async () => {
+      vi.mocked(getAllFolders).mockResolvedValue([]);
+
+      const store = new FavoritesStore(makeMemento());
+      await store.add("C:/solo");
+      const cache = new PathExistenceCache();
+      cache.markPresent("C:/solo");
+
+      const provider = new FavoritesProvider(store, cache);
+      const top = await provider.getChildren();
+
+      expect(top).toHaveLength(1);
+      expect(
+        top[0].collapsibleState,
+        "a favorited root with no worktree children must stay a flat (None-collapsible) leaf, not a group"
+      ).toBe(TreeItemCollapsibleState.None);
+    });
   });
 });
