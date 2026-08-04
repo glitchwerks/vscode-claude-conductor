@@ -307,6 +307,69 @@ describe("RecentProjectsProvider — grouped tree", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Recent Projects leaf contextValue (issue #79)
+//
+// PR #77 moved the projectRoot.favorited|unfavorited|missing contextValue to
+// the group row so the favorites star lives there. That left the group row
+// as the only thing carrying a projectRoot.* contextValue, which the
+// openSession inline-menu clause matches — so the Launch Session play button
+// now shows on the always-visible group row instead of the leaf row it used
+// to live on. The fix (issue #79, "Option A") is a distinct contextValue for
+// non-worktree leaf rows, separate from the group row's projectRoot.* token.
+// ---------------------------------------------------------------------------
+
+describe("RecentProjectsProvider — leaf contextValue for Launch Session (issue #79)", () => {
+  const root = "/home/user/my-project";
+
+  beforeEach(() => {
+    vi.mocked(getAllFolders).mockResolvedValue([]);
+  });
+
+  it("non-worktree leaf row has its own leaf-only contextValue, distinct from the group row's projectRoot.* token", async () => {
+    vi.mocked(getAllFolders).mockResolvedValue([makeFolder(root)]);
+    const mgr = makeSessionManager([]);
+    const provider = new RecentProjectsProvider(mgr as never, makeFakeFavoritesStore(), makeFakeExistenceCache());
+
+    const topLevel = await provider.getChildren(undefined);
+    const leaves = await provider.getChildren(topLevel[0]);
+
+    expect(leaves).toHaveLength(1);
+    // Assumed token name from issue #79's suggested example — see
+    // VIEW_ITEM.RECENT_PROJECT_LEAF once introduced.
+    expect(leaves[0].contextValue).toBe("recentProjectLeaf");
+    // And it must never collide with the group row's own contextValue —
+    // otherwise a menu clause aimed at the leaf would also hit the group.
+    expect(leaves[0].contextValue).not.toBe(topLevel[0].contextValue);
+  });
+
+  it("non-worktree leaf contextValue does not vary with the group's favorited state", async () => {
+    // The leaf's Launch Session identity must not be entangled with the
+    // group row's favorite/unfavorite/missing state — that state lives on
+    // the group row only.
+    vi.mocked(getAllFolders).mockResolvedValue([makeFolder(root)]);
+    const mgr = makeSessionManager([]);
+    const favoritesStore = {
+      isFavorited: () => true,
+      list: () => [],
+      isOverCap: () => false,
+      onDidChange: () => ({ dispose: () => {} }),
+      add: async () => ({ ok: true }),
+      remove: async () => undefined,
+      relocate: async () => ({ ok: true }),
+      waitForIdle: async () => undefined,
+      dispose: () => {},
+    } as unknown as FavoritesStoreType;
+    const provider = new RecentProjectsProvider(mgr as never, favoritesStore, makeFakeExistenceCache());
+
+    const topLevel = await provider.getChildren(undefined);
+    expect(topLevel[0].contextValue).toBe(VIEW_ITEM.PROJECT_ROOT_FAVORITED);
+
+    const leaves = await provider.getChildren(topLevel[0]);
+    expect(leaves[0].contextValue).toBe("recentProjectLeaf");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // VIEW_ITEM constants
 // ---------------------------------------------------------------------------
 

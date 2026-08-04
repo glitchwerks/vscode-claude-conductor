@@ -120,4 +120,111 @@ describe("package.json viewItem ↔ VIEW_ITEM bidirectional bijection", () => {
       ).toBe(false);
     }
   });
+
+  // -------------------------------------------------------------------------
+  // Issue #79: PR #77 moved the projectRoot.favorited|unfavorited|missing
+  // contextValue to the group row (so the favorites star lives there). That
+  // left the Recent Projects group row as the only thing carrying a
+  // projectRoot.* contextValue, which the openSession inline-menu clause
+  // matches — so the Launch Session play button now shows on the
+  // always-visible group row instead of the inner leaf rows.
+  //
+  // Fix ("Option A" in the issue): a leaf-only contextValue, distinct from
+  // the group row's projectRoot.* token, assumed here to be
+  // "recentProjectLeaf" (the issue's own suggested example name). The
+  // openSession clause scoped to the recentProjects view should match that
+  // leaf token instead of the group's projectRoot.(favorited|unfavorited).
+  // Worktree-child leaves (viewItem == worktreeChild) and the
+  // addFavorite/removeFavorite clauses (group-row-only) are unaffected by
+  // this change and are not asserted on here.
+  // -------------------------------------------------------------------------
+  describe("issue #79 — Launch Session must target the Recent-Projects leaf row, not the group row", () => {
+    const RECENT_PROJECT_LEAF = "recentProjectLeaf";
+
+    const openSessionClauses = clauses.filter(
+      (c) => c.command === "claudeConductor.openSession" && c.when
+    );
+
+    /**
+     * Every `when` clause in this project that scopes to the recentProjects
+     * view spells the view id out literally (`view == claudeConductor.recentProjects`
+     * or a `view =~ /.../ ` regex containing the substring) — see the
+     * existing view/item/context clauses in package.json. A substring check
+     * is sufficient and avoids re-implementing a `when`-clause parser.
+     */
+    function targetsRecentProjectsView(when: string): boolean {
+      return when.includes("recentProjects");
+    }
+
+    const recentProjectsOpenSessionClauses = openSessionClauses.filter((c) =>
+      targetsRecentProjectsView(c.when ?? "")
+    );
+
+    it("sanity: at least one openSession clause is scoped to the recentProjects view", () => {
+      expect(recentProjectsOpenSessionClauses.length).toBeGreaterThan(0);
+    });
+
+    it("no openSession clause scoped to the recentProjects view matches the group row's projectRoot.favorited/unfavorited token", () => {
+      for (const c of recentProjectsOpenSessionClauses) {
+        const when = c.when ?? "";
+        const literals = extractEqLiterals(when);
+        const regexes = extractRegexes(when);
+
+        for (const groupToken of ["projectRoot.favorited", "projectRoot.unfavorited"]) {
+          const matchesLiteral = literals.includes(groupToken);
+          const matchesRegex = regexes.some((re) => re.test(groupToken));
+          expect(
+            matchesLiteral || matchesRegex,
+            `openSession when-clause '${when}' (scoped to recentProjects) must NOT match group-row token '${groupToken}' — the Launch Session play button belongs on the leaf row, not the always-visible group row (issue #79). Note: the Favorites view still needs 'projectRoot.favorited' to match openSession (FavoriteLeafItem is a flat row, not a group+leaf pair), so the fix must split the old combined clause by view rather than narrowing viewItem alone across both views.`
+          ).toBe(false);
+        }
+      }
+    });
+
+    it("openSession still matches projectRoot.favorited for the favorites view (must survive the recentProjects narrowing)", () => {
+      const favoritesScoped = openSessionClauses.filter((c) =>
+        (c.when ?? "").includes("favorites")
+      );
+      expect(favoritesScoped.length).toBeGreaterThan(0); // sanity
+
+      const matchesFavoritedToken = favoritesScoped.some((c) => {
+        const when = c.when ?? "";
+        const literals = extractEqLiterals(when);
+        const regexes = extractRegexes(when);
+        return (
+          literals.includes("projectRoot.favorited") ||
+          regexes.some((re) => re.test("projectRoot.favorited"))
+        );
+      });
+
+      expect(
+        matchesFavoritedToken,
+        "Favorites leaf rows carry the projectRoot.favorited contextValue directly (FavoriteLeafItem is a flat row, no separate group/leaf split) and need it to keep matching openSession for their Launch Session button — issue #79's fix must not strip projectRoot.favorited from openSession entirely, only from the recentProjects-scoped clause"
+      ).toBe(true);
+    });
+
+    it("an openSession clause scoped to the recentProjects view matches the new leaf-only token", () => {
+      const matchesLeafToken = recentProjectsOpenSessionClauses.some((c) => {
+        const when = c.when ?? "";
+        const literals = extractEqLiterals(when);
+        const regexes = extractRegexes(when);
+        return (
+          literals.includes(RECENT_PROJECT_LEAF) ||
+          regexes.some((re) => re.test(RECENT_PROJECT_LEAF))
+        );
+      });
+
+      expect(
+        matchesLeafToken,
+        `no openSession clause scoped to the recentProjects view matches the assumed leaf-only token '${RECENT_PROJECT_LEAF}' — introduce a distinct contextValue for non-worktree Recent-Projects leaf rows and reference it in the openSession when-clause (issue #79, Option A)`
+      ).toBe(true);
+    });
+
+    it("VIEW_ITEM exposes the new leaf-only token so the bijection detector above can track it", () => {
+      expect(
+        VIEW_ITEM_VALUES,
+        `VIEW_ITEM should include a '${RECENT_PROJECT_LEAF}' value for the Recent-Projects leaf contextValue (issue #79) so the bijection tests above cover it`
+      ).toContain(RECENT_PROJECT_LEAF);
+    });
+  });
 });
