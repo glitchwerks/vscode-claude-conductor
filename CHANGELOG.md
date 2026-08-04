@@ -4,6 +4,8 @@ All notable changes to the Claude Conductor extension are documented here.
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-08-04
+
 ### Added
 - **`claudeConductor.debugLogging` setting** — when enabled, emits verbose structured `key=value` diagnostic lines to the "Claude Conductor" output channel for every session-lifecycle event: terminal tracking (`[track]`, `[track:pid]`), close-detection tier outcomes (`[close]`, `[close:tier1]`, `[close:tier2]`, `[close:tier3]`, `[close:tier3:no-pid]`), PID index mutations (`[pid:delete]`), and reconcile poll results (`[reconcile]`, `[reconcile:evict]`, `[reconcile:clean]`). Default off; intended for diagnosing missed editor-tab close events (refs #68 phase A).
 - **Favorites sidebar section** ([#75](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/75))
@@ -18,6 +20,8 @@ All notable changes to the Claude Conductor extension are documented here.
 
 ### Fixed
 - **Open in New Window no longer silently no-ops on the current window** — when the command is invoked on a session whose folder is already the active workspace, VS Code would receive the `vscode://` URI, route it back to the same window, and the user would perceive no change. The command now detects this case via a case-insensitive folder comparison, shows a dismissible info toast ("You're already in this project's window — focused the session instead."), and focuses the session tab instead of firing the URI. Fixes #66.
+- **Launch Session inline play button appeared on the wrong row** — a regression from PR #77, which moved the favorites-star `contextValue` onto the Recent Projects group row; the `openSession` menu clause matched that same token, so the play button surfaced on the group row instead of the project underneath it. Leaf rows now have their own `recentProjectLeaf` contextValue, and the `openSession` menu clause is split by view. Fixes #79 (PR #101).
+- **Closing one session could remove a different, still-running session from the sidebar** — when two tracked folders shared a basename (e.g. same-named worktrees), tier-2 close-detection in `_handleTerminalClose` matched the closed terminal to a tracked session by `terminal.name` alone, so the wrong session's row could be evicted while the one actually closed stayed listed. Tier-2 now disambiguates on folder path before falling back to PID match. Fixes #99 (PR #100).
 
 ## [1.3.0] — 2026-04-23
 
