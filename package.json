@@ -161,7 +161,12 @@
         },
         {
           "command": "claudeConductor.openSession",
-          "when": "view =~ /claudeConductor\\.(recentProjects|favorites)/ && viewItem =~ /^projectRoot\\.(favorited|unfavorited)$/",
+          "when": "view == claudeConductor.favorites && viewItem == projectRoot.favorited",
+          "group": "inline"
+        },
+        {
+          "command": "claudeConductor.openSession",
+          "when": "view == claudeConductor.recentProjects && viewItem == recentProjectLeaf",
           "group": "inline"
         },
         {

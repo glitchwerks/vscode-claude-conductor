@@ -14,6 +14,7 @@ export const VIEW_ITEM = {
   PROJECT_ROOT_FAVORITED:   "projectRoot.favorited",
   PROJECT_ROOT_UNFAVORITED: "projectRoot.unfavorited",
   PROJECT_ROOT_MISSING:     "projectRoot.missing",
+  RECENT_PROJECT_LEAF:      "recentProjectLeaf",
   WORKTREE_CHILD:           "worktreeChild",
   ACTIVE_SESSION:           "activeSession",
 } as const;
@@ -196,7 +197,9 @@ class RecentProjectItem extends vscode.TreeItem {
       : entry.parentDir;
     this.tooltip = `${entry.folderPath} (${entry.source})`;
     this.iconPath = new vscode.ThemeIcon("folder");
-    this.contextValue = isWorktreeChild ? VIEW_ITEM.WORKTREE_CHILD : undefined;
+    this.contextValue = isWorktreeChild
+      ? VIEW_ITEM.WORKTREE_CHILD
+      : VIEW_ITEM.RECENT_PROJECT_LEAF;
 
     this.command = {
       command: "claudeConductor.openSession",
