@@ -58,7 +58,7 @@ describe("SessionManager close detection", () => {
     manager.dispose();
   });
 
-  it("defers when same-named terminals cannot be disambiguated by folder", () => {
+  it("falls back to PID when same-named terminals cannot be disambiguated by folder", async () => {
     let openCallback: ((terminal: import("vscode").Terminal) => void) | undefined;
     let closeCallback: ((terminal: import("vscode").Terminal) => void) | undefined;
 
@@ -74,16 +74,18 @@ describe("SessionManager close detection", () => {
     const manager = new SessionManager();
     openCallback!(makeTerminal("/repo2/foo", 202));
     openCallback!(makeTerminal("/repo1/foo", 101));
+    await Promise.resolve();
 
     const ambiguousClosedTerminal = {
-      ...makeTerminal("/unused/foo", 999),
+      ...makeTerminal("/unused/foo", 101),
       creationOptions: {},
     } as import("vscode").Terminal;
     closeCallback!(ambiguousClosedTerminal);
+    await Promise.resolve();
 
-    expect(manager.findSessionByFolder("/repo1/foo")).toBeDefined();
+    expect(manager.findSessionByFolder("/repo1/foo")).toBeUndefined();
     expect(manager.findSessionByFolder("/repo2/foo")).toBeDefined();
-    expect(manager.count).toBe(2);
+    expect(manager.count).toBe(1);
 
     manager.dispose();
   });
