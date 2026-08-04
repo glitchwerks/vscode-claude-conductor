@@ -314,7 +314,7 @@ export class SessionManager implements vscode.Disposable {
   /**
    * Handle a terminal-close event with three-tier fallback:
    * 1. Identity match (the common case for panel terminals).
-   * 2. Name match (handles some reference swaps after moveToEditor).
+   * 2. Name match, disambiguated by folder (handles some reference swaps after moveToEditor).
    * 3. PID match (handles the editor-tab X case where name becomes "").
    */
   private _handleTerminalClose(terminal: vscode.Terminal): void {
@@ -329,14 +329,39 @@ export class SessionManager implements vscode.Disposable {
 
     // Tier 2 — name match (only when name is non-empty)
     if (terminal.name) {
-      for (const [key, session] of this._sessions) {
-        if (session.terminal.name === terminal.name) {
-          debugLog(`[close:tier2] hit name=${JSON.stringify(terminal.name)} matchedSession=${JSON.stringify(session.folderPath)}`);
+      const nameMatches = Array.from(this._sessions.entries()).filter(
+        ([, session]) => session.terminal.name === terminal.name
+      );
+
+      if (nameMatches.length === 1) {
+        const [[key, session]] = nameMatches;
+        debugLog(`[close:tier2] hit name=${JSON.stringify(terminal.name)} matchedSession=${JSON.stringify(session.folderPath)}`);
+        this._removeByKey(key);
+        return;
+      }
+
+      if (nameMatches.length > 1) {
+        const closedFolderPath = this._extractFolderPath(terminal);
+        const normalizedClosedFolderPath = closedFolderPath
+          ? path.normalize(closedFolderPath).toLowerCase()
+          : undefined;
+        const folderMatches = normalizedClosedFolderPath
+          ? nameMatches.filter(([, session]) =>
+              session.folderPath.toLowerCase() === normalizedClosedFolderPath
+            )
+          : [];
+
+        if (folderMatches.length === 1) {
+          const [[key, session]] = folderMatches;
+          debugLog(`[close:tier2:disambiguated] hit name=${JSON.stringify(terminal.name)} closedFolderPath=${JSON.stringify(closedFolderPath)} matchedSession=${JSON.stringify(session.folderPath)}`);
           this._removeByKey(key);
           return;
         }
+
+        debugLog(`[close:tier2:ambiguous] name=${JSON.stringify(terminal.name)} candidates=${nameMatches.length} closedFolderPath=${JSON.stringify(closedFolderPath)} folderMatches=${folderMatches.length} — deferring to tier 3`);
+      } else {
+        debugLog(`[close:tier2] miss name=${JSON.stringify(terminal.name)} checkedSessions=${this._sessions.size}`);
       }
-      debugLog(`[close:tier2] miss name=${JSON.stringify(terminal.name)} checkedSessions=${this._sessions.size}`);
     } else {
       debugLog(`[close:tier2] skip name="" (empty — cannot match by name)`);
     }
