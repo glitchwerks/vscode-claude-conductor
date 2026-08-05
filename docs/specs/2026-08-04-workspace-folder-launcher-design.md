@@ -15,7 +15,7 @@ skills_relevant:
 
 # Multi-root workspace folder launcher
 
-**Tracking issue:** [#103 "feat: launch session in a specific VS Code multi-root workspace folder"](https://github.com/glitchwerks/vscode-claude-conductor/issues/103) — verified open, body fetched 2026-08-04.
+**Tracking issue:** [#103 "feat: launch session in a specific VS Code multi-root workspace folder"](https://github.com/glitchwerks/vscode-claude-conductor/issues/103) — verified open, body fetched 2026-08-04 (America/New_York — see Verification note for the UTC reconciliation).
 
 **Type:** feature-spec
 
@@ -67,15 +67,24 @@ plus `vscode.window.registerTreeDataProvider` / `createTreeView` in
 `src/extension.ts` (mirroring the existing wiring at
 `src/extension.ts:145-167`). The three existing sidebar sections and the
 current command list are both enumerated in `README.md` (the sections at
-`README.md:21-23`, the command/settings tables further down) — adding a
-fourth section and a new command-palette command (FR-7) means `README.md`
-needs a corresponding update, and `CHANGELOG.md` needs a new entry per this
-repo's release tooling (`test/extract-changelog.test.ts` reads it
-structurally, and `docs/release-strategy.md` treats it as part of the release
-process).
+`README.md:21-23`, the command list at `README.md:98-106`, the settings
+table at `README.md:82-88`) — adding a fourth section and a new
+command-palette command (FR-7) means `README.md` needs a corresponding
+update, and `CHANGELOG.md` needs a new entry per this repo's release
+process: `docs/release-strategy.md:151-155` requires moving `[Unreleased]`
+entries into a new versioned `## [X.Y.Z] — YYYY-MM-DD` section on every
+release, and `docs/release-strategy.md:172-178` states the publish workflow
+uses that matching CHANGELOG entry as the GitHub Release notes. The heading
+shape that entry must follow — `## [<version>]` — is read from `CHANGELOG.md`
+by the CLI entrypoint at `scripts/extract-changelog.js:93-105`, via the regex
+at `scripts/extract-changelog.js:49-64`; `test/extract-changelog.test.ts:5-28`
+covers that heading shape, but against a hardcoded fixture string, not the
+real `CHANGELOG.md` — it is coverage of the parsing function, not a reader of
+the file itself.
 
-**FR-2.** The new section shows exactly one row per entry in
-`vscode.workspace.workspaceFolders` — a new `WorkspaceFolderItem extends
+**FR-2.** The new section shows exactly one row per entry in the normalized
+`folders` value defined in NFR-13 (sourced from
+`vscode.workspace.workspaceFolders`) — a new `WorkspaceFolderItem extends
 vscode.TreeItem` class, following the same shape as the existing leaf-item
 classes in `treeView.ts`: `RecentProjectItem` (`src/treeView.ts:189-210`) and
 `FavoriteLeafItem` (`src/treeView.ts:280-312`). Label = folder basename,
@@ -110,23 +119,24 @@ needed for row-click. `SessionManager.launchSession()`'s existing
 reuse-and-focus guard (`src/sessionManager.ts:111-117`) is reused as-is.
 
 **FR-6.** The "Workspace Folders" view is visible only when
-`vscode.workspace.workspaceFolders.length > 1`; hidden entirely at 0 or 1
-root. Implemented via a VS Code `when`-clause context key (e.g.
+`folders.length > 1` (the normalized value from NFR-13); hidden entirely at 0
+or 1 root. Implemented via a VS Code `when`-clause context key (e.g.
 `claudeConductor.hasMultiRootWorkspace`) set with
 `vscode.commands.executeCommand('setContext', ...)` at extension activation
 and on `vscode.workspace.onDidChangeWorkspaceFolders`. No `setContext` call
-exists anywhere in `src/` today (verified by repo-wide grep for `setContext`
-across `src/`, zero matches) — this is new plumbing, not reuse of an existing
-pattern.
+exists anywhere in `src/` today (verified via `git grep -n "setContext" --
+src/`, zero matches, checked 2026-08-04) — this is new plumbing, not reuse of
+an existing pattern.
 
 **FR-7.** A new command `claudeConductor.launchInWorkspaceFolder` is
 registered (title: "Claude Conductor: Launch Session in Workspace Folder..."),
 shown in the command palette. It shows a `vscode.window.showQuickPick`
-populated from `vscode.workspace.workspaceFolders` (name + path per item),
-then calls `sessionManager.launchSession(picked.uri.fsPath)` on selection.
-Structurally mirrors `showQuickPick()` in `src/quickPick.ts:14-92`, but
-sources items from `vscode.workspace.workspaceFolders` instead of
-`getAllFolders()` (`src/folderSource.ts:52-92`). Implemented in
+populated from the normalized `folders` value from NFR-13 (name + path per
+item, sourced from `vscode.workspace.workspaceFolders`), then calls
+`sessionManager.launchSession(picked.uri.fsPath)` on selection. Structurally
+mirrors `showQuickPick()` in `src/quickPick.ts:14-92`, but sources items from
+that normalized `folders` value instead of `getAllFolders()`
+(`src/folderSource.ts:52-92`). Implemented in
 `src/extension.ts` alongside the other command registrations
 (`src/extension.ts:178-300`), not in `src/quickPick.ts` — `quickPick.ts` is
 read as a structural model, not modified.
@@ -143,11 +153,13 @@ folder list and not relevant to native VS Code workspace folders.
 **NFR-10.** A folder removed from the workspace while a session is active for
 it: the row disappears on the next `onDidChangeWorkspaceFolders` re-render,
 but the running terminal itself is untouched. This matches existing behavior
-elsewhere — verified-absent: a repo-wide grep for `onDidChangeWorkspaceFolders`
-and for calls to `closeSession(` across `src/` shows no code path that closes
-or kills a session in response to a folder-list change; `closeSession` is
-only invoked from the explicit `claudeConductor.closeSession` command handler
-(`src/extension.ts:205-210`), which requires an explicit user action.
+elsewhere — verified-absent: `git grep -n "onDidChangeWorkspaceFolders" --
+src/` returns no matches, and `git grep -n "closeSession(" -- src/` returns
+exactly two matches (both checked 2026-08-04): the method definition
+(`src/sessionManager.ts:199`) and its sole call site inside the explicit
+`claudeConductor.closeSession` command handler (`src/extension.ts:205-210`).
+No code path closes or kills a session in response to a folder-list change;
+`closeSession` requires an explicit user action to invoke.
 
 **NFR-11.** The missing-folder-on-disk guard in
 `SessionManager.launchSession()` (`src/sessionManager.ts:100-109`) is reused
@@ -192,6 +204,22 @@ in `test/extension.commandArgs.test.ts`, which already exercises
 file's header comment, `test/extension.commandArgs.test.ts:1-17`), rather
 than a new test file.
 
+**NFR-13 — undefined-safe `workspaceFolders` access.**
+`vscode.workspace.workspaceFolders` is typed `readonly WorkspaceFolder[] |
+undefined`, and its doc comment states it is `undefined` when no workspace
+has been opened, not an empty array (`"List of workspace folders (0-N) that
+are open in the editor. undefined when no workspace has been opened."` —
+`https://github.com/microsoft/vscode/blob/main/src/vscode-dts/vscode.d.ts`,
+fetched 2026-08-04). None of FR-2's tree provider, FR-6's visibility
+context-key logic, or FR-7's QuickPick population may read
+`vscode.workspace.workspaceFolders` directly — all three read one shared,
+normalized value, declared once: `const folders =
+vscode.workspace.workspaceFolders ?? []`. This guarantees `.length` and
+iteration in FR-2/FR-6/FR-7 never dereference `undefined`, and keeps the
+three call sites consistent with each other and with NFR-9's empty-state
+handling. Testable: a reviewer can confirm no call site outside that single
+normalization point reads `vscode.workspace.workspaceFolders` directly.
+
 ## 3. Scope boundaries
 
 **In scope:** everything in Requirements above — the new tree section, the
@@ -216,9 +244,9 @@ gate.
 ## 4. Risks
 
 - **New `setContext` plumbing is untested territory in this codebase**
-  (verified via repo-wide grep for `setContext` under `src/`, zero existing
-  matches — see FR-6). A mis-wired `when` clause could either always-hide or
-  always-show the section. Mitigated by the new, purpose-built visibility
+  (verified via `git grep -n "setContext" -- src/`, zero matches, checked
+  2026-08-04 — see FR-6). A mis-wired `when` clause could either always-hide
+  or always-show the section. Mitigated by the new, purpose-built visibility
   `when`-clause test described in NFR-12(c) — note this is separate coverage
   from the existing `packageJsonContextKeys.test.ts` bijection, which does
   not parse `contributes.views`.
@@ -250,3 +278,32 @@ the `mcp__github__get_issue` MCP tool was not available in this session's
 toolset, so the CLI fallback documented for GitHub URLs was used instead; its
 JSON output was read directly, so this is not a degraded-confidence citation.
 No other tooling was unavailable.
+
+**Date convention.** Every `fetched YYYY-MM-DD` date in this document is in
+`America/New_York`, matching this repo's commit-timestamp convention — `git
+log --date=iso-strict` on this branch shows `-04:00` offsets throughout, e.g.
+commit `1f1208e` at `2026-08-04T20:53:18-04:00`. Issue #103's GitHub
+`createdAt` is `2026-08-05T00:44:37Z` (UTC), which is
+`2026-08-04T20:44:37-04:00` in this convention — nine minutes before this
+spec's own commit `1f1208e` (`docs: add spec for multi-root workspace folder
+launcher (#103)`, `2026-08-04T20:53:18-04:00`). The issue-body fetch
+underlying this document's `2026-08-04` citations therefore postdates the
+issue's creation in both UTC and local time; `2026-08-04` is correct under
+this repo's local-time convention, not an off-by-one error.
+
+**Re-verification pass (CodeRabbit review, PR #105, 2026-08-04).** This
+document was re-checked against the working tree at worktree `HEAD`
+`1f1208e`, one commit ahead of the `7fee18b` base above. `git diff --stat
+7fee18b..HEAD` shows only `docs/README.md` and this spec file changed between
+the two commits — no cited source file (`src/**`, `test/**`, `package.json`,
+`README.md`, `docs/release-strategy.md`, `scripts/extract-changelog.js`)
+moved, so every line-number citation above remains valid at `1f1208e`. The
+`setContext`, `onDidChangeWorkspaceFolders`, and `closeSession(` claims in
+FR-6, NFR-10, and § 4 Risks were re-run as `git grep -n "<pattern>" -- src/`
+on this date, and their citations were rewritten to name the exact command
+and result rather than "repo-wide grep." The `vscode.workspace.workspaceFolders`
+type claim in NFR-13 was verified by fetching
+`https://github.com/microsoft/vscode/blob/main/src/vscode-dts/vscode.d.ts`
+on 2026-08-04 and reading the property's declaration and doc comment
+directly. As before, no MCP GitHub tool was available in this session; `gh`
+and `git` were used directly throughout.
