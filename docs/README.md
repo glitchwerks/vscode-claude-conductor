@@ -25,6 +25,7 @@ Directory: `specs/`
 | Document | Type | Status | Issue |
 |---|---|---|---|
 | [`2026-07-29-foundational-project-spec.md`](specs/2026-07-29-foundational-project-spec.md) | foundational-spec | ACCEPTED | #82 |
+| [`2026-08-04-workspace-folder-launcher-design.md`](specs/2026-08-04-workspace-folder-launcher-design.md) | feature-spec | ACCEPTED | #103 |
 
 The foundational spec is the durable anchor: problem statement, audience,
 feature inventory, and roadmap. Per-feature specs reference it rather than
