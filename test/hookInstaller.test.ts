@@ -13,9 +13,17 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as fs from "fs";
+import { execSync } from "child_process";
 
 // We mock fs so we don't touch the real ~/.claude/settings.json
 vi.mock("fs");
+// We mock child_process so tests never shell out to a real `where`/`which`
+// process. resolveNodeBinary()'s PATH-lookup behavior is exercised via
+// dependency injection in its own describe block below; this module mock
+// exists only to back the getHookScriptPath integration tests, where DI
+// isn't available (getHookScriptPath calls resolveNodeBinary() internally
+// with its default, un-injected dependencies).
+vi.mock("child_process");
 
 // Unix-style paths used in unit tests for hooksUpToDate / reconcileHookPaths
 // (those functions are purely string-based and platform-agnostic).
@@ -67,7 +75,12 @@ function makeSettingsWithHooks(scriptBase: string): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 // Import helpers under test AFTER setting up the vi.mock above
 // ---------------------------------------------------------------------------
-import { hooksUpToDate, reconcileHookPaths, getHookScriptPath } from "../src/hookInstaller.js";
+import {
+  hooksUpToDate,
+  reconcileHookPaths,
+  getHookScriptPath,
+  resolveNodeBinary,
+} from "../src/hookInstaller.js";
 
 describe("hooksUpToDate", () => {
   it("returns true when all hook commands match the expected script base", () => {
@@ -198,6 +211,16 @@ function makeContext(extensionPath: string) {
 describe("ensureHooksInstalled — path reconciliation", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // getHookScriptPath() calls resolveNodeBinary() internally on win32,
+    // which by default shells out via child_process.execSync. Force it to
+    // throw so these tests never depend on (or shell out to) whatever node
+    // install happens to exist on the machine running the suite — combined
+    // with fs.existsSync being reset to an unconfigured (falsy) mock above,
+    // this deterministically drives resolveNodeBinary to its final
+    // hardcoded fallback on every call, on every machine.
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
   });
 
   it("silently rewrites stale paths and returns true without prompting the user", async () => {
@@ -257,4 +280,215 @@ describe("ensureHooksInstalled — path reconciliation", () => {
     expect(result).toBe(true);
     expect(writeMock).not.toHaveBeenCalled();
   });
+});
+
+// ---------------------------------------------------------------------------
+// resolveNodeBinary (issue #104)
+//
+// getHookScriptPath() used to hardcode /c/PROGRA~1/nodejs/node.exe for every
+// win32 hook command, which doesn't exist on a machine where node is only
+// installed via a version manager (nvm4w, nvm-windows, volta) and there's no
+// Program Files node install. resolveNodeBinary() replaces that hardcode
+// with a PATH lookup, falling back to a short list of well-known install
+// locations, and only falling back to the old hardcoded literal as a last
+// resort so behavior never regresses to a crash.
+//
+// These tests use dependency injection (the deps?: { execSync, existsSync }
+// param) rather than the module-level child_process/fs mocks above, so each
+// case is self-contained and never depends on — or shells out to — whatever
+// node install (if any) exists on the machine running the suite.
+// ---------------------------------------------------------------------------
+
+describe("resolveNodeBinary", () => {
+  const isWin32 = process.platform === "win32";
+
+  const PATH_LOOKUP_CMD = isWin32 ? "where node" : "which node";
+
+  const FOUND_NODE_PATH = isWin32
+    ? "C:\\Users\\dev\\AppData\\Roaming\\nvm\\v20.11.0\\node.exe"
+    : "/home/dev/.nvm/versions/node/v20.11.0/bin/node";
+
+  const OTHER_PATH_LINE = isWin32
+    ? "C:\\Users\\dev\\AppData\\Roaming\\nvm\\v18.20.0\\node.exe"
+    : "/home/dev/.nvm/versions/node/v18.20.0/bin/node";
+
+  const STALE_PATH_ENTRY = isWin32
+    ? "C:\\Users\\dev\\old-node-install\\node.exe"
+    : "/opt/old-node-install/bin/node";
+
+  // Common-path fallback candidates, in the order resolveNodeBinary should
+  // try them.
+  const FIRST_COMMON_PATH = isWin32 ? "C:\\Program Files\\nodejs\\node.exe" : "/usr/local/bin/node";
+  const SECOND_COMMON_PATH = isWin32 ? "C:\\nvm4w\\nodejs\\node.exe" : "/usr/bin/node";
+
+  // Last-resort literal — never throws, matches today's behavior so nothing
+  // regresses to a crash.
+  const FINAL_DEFAULT = isWin32 ? "C:\\Program Files\\nodejs\\node.exe" : "node";
+
+  function makeDeps(
+    execSyncImpl: () => string,
+    existsSyncImpl: (path: string) => boolean
+  ): { execSync: typeof execSync; existsSync: typeof fs.existsSync } {
+    return {
+      execSync: vi.fn(execSyncImpl) as unknown as typeof execSync,
+      existsSync: vi.fn(existsSyncImpl) as unknown as typeof fs.existsSync,
+    };
+  }
+
+  it("returns the first line of the PATH lookup result when it exists on disk", () => {
+    const stdout = `${FOUND_NODE_PATH}\r\n${OTHER_PATH_LINE}\r\n`;
+    const deps = makeDeps(
+      () => stdout,
+      (candidate) => candidate === FOUND_NODE_PATH
+    );
+
+    const result = resolveNodeBinary(deps);
+
+    expect(result).toBe(FOUND_NODE_PATH);
+    expect(deps.execSync).toHaveBeenCalledWith(PATH_LOOKUP_CMD, { encoding: "utf8" });
+  });
+
+  it("falls through to common-path probing when the PATH lookup command throws", () => {
+    const deps = makeDeps(
+      () => {
+        throw new Error("command not found");
+      },
+      (candidate) => candidate === FIRST_COMMON_PATH
+    );
+
+    expect(resolveNodeBinary(deps)).toBe(FIRST_COMMON_PATH);
+  });
+
+  it("falls through to common-path probing when the resolved PATH entry does not exist on disk (stale PATH)", () => {
+    const deps = makeDeps(
+      () => `${STALE_PATH_ENTRY}\n`,
+      (candidate) => candidate === FIRST_COMMON_PATH
+    );
+
+    expect(resolveNodeBinary(deps)).toBe(FIRST_COMMON_PATH);
+  });
+
+  it("picks the second common path when the first common path is absent", () => {
+    const deps = makeDeps(
+      () => {
+        throw new Error("command not found");
+      },
+      (candidate) => candidate === SECOND_COMMON_PATH
+    );
+
+    expect(resolveNodeBinary(deps)).toBe(SECOND_COMMON_PATH);
+  });
+
+  it("returns the hardcoded default when nothing resolves", () => {
+    const deps = makeDeps(
+      () => {
+        throw new Error("command not found");
+      },
+      () => false
+    );
+
+    expect(resolveNodeBinary(deps)).toBe(FINAL_DEFAULT);
+  });
+
+  describe("default dependencies", () => {
+    beforeEach(() => {
+      vi.mocked(execSync).mockReset();
+      (fs.existsSync as ReturnType<typeof vi.fn>).mockReset();
+    });
+
+    it("uses child_process.execSync and fs.existsSync when no deps object is passed", () => {
+      vi.mocked(execSync).mockReturnValue(`${FOUND_NODE_PATH}\n`);
+      (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation(
+        (candidate: string) => candidate === FOUND_NODE_PATH
+      );
+
+      const result = resolveNodeBinary();
+
+      expect(result).toBe(FOUND_NODE_PATH);
+      expect(execSync).toHaveBeenCalledWith(PATH_LOOKUP_CMD, { encoding: "utf8" });
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getHookScriptPath — node binary quoting (issue #104)
+//
+// getHookScriptPath() delegates node-binary resolution to resolveNodeBinary()
+// on win32. Whatever path comes back gets converted to git-bash form; if that
+// path contains a space (e.g. a version-manager install under a user profile
+// with a space in it, "C:\Users\John Doe\...") it must be wrapped in double
+// quotes so Claude Code's hook command parsing doesn't split on the space.
+// Only the node-binary segment is pinned below — the extension-path tail
+// format isn't specified by the fix and is left to the implementer, so it's
+// asserted loosely (via endsWith) rather than as an exact string match.
+//
+// Only meaningful on win32 — the git-bash conversion/quoting step is a
+// win32-only concern (POSIX keeps the existing bare "node" literal
+// unaffected by this fix), so these are gated to run only on win32. This
+// project's CI "test" job runs on ubuntu-latest only, so these two cases are
+// skipped there; a local `npx vitest run` on Windows is the verification of
+// record for this behavior, consistent with the git-bash path-conversion
+// logic elsewhere in getHookScriptPath already only being exercised when the
+// suite itself runs on Windows.
+//
+// Assumption: each case here reconfigures execSync/existsSync and calls
+// getHookScriptPath() independently, which assumes resolveNodeBinary() is
+// NOT memoized at module scope across calls within a single process. If the
+// implementation adds such caching (e.g. to avoid re-shelling-out on every
+// hook install/reconcile), these two tests would need a cache-reset hook.
+// ---------------------------------------------------------------------------
+
+function toGitBashPath(winPath: string): string {
+  return winPath
+    .replace(/^([A-Za-z]):\\/, (_match, drive: string) => `/${drive.toLowerCase()}/`)
+    .replace(/\\/g, "/");
+}
+
+describe("getHookScriptPath — node binary quoting", () => {
+  const SPACED_NODE_PATH = "C:\\Users\\John Doe\\AppData\\Roaming\\nvm\\v20.11.0\\node.exe";
+  const NVM4W_NODE_PATH = "C:\\nvm4w\\nodejs\\node.exe";
+
+  beforeEach(() => {
+    vi.mocked(execSync).mockReset();
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockReset();
+  });
+
+  it.runIf(process.platform === "win32")(
+    "quotes the resolved node binary segment when its path contains a space",
+    () => {
+      vi.mocked(execSync).mockReturnValue(`${SPACED_NODE_PATH}\r\n`);
+      (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation(
+        (candidate: string) => candidate === SPACED_NODE_PATH
+      );
+
+      const context = makeContext(NEW_EXT_PATH);
+      const scriptBase = getHookScriptPath(context);
+
+      const expectedNodeSegment = `"${toGitBashPath(SPACED_NODE_PATH)}"`;
+      expect(scriptBase.startsWith(`${expectedNodeSegment} `)).toBe(true);
+      expect(scriptBase.endsWith("/hooks/session-state.js")).toBe(true);
+    }
+  );
+
+  it.runIf(process.platform === "win32")(
+    "does not quote the resolved node binary segment when its path has no space",
+    () => {
+      // PATH lookup fails; Program Files is absent but nvm4w is present —
+      // resolves via the second common-path candidate, which has no space.
+      vi.mocked(execSync).mockImplementation(() => {
+        throw new Error("command not found");
+      });
+      (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation(
+        (candidate: string) => candidate === NVM4W_NODE_PATH
+      );
+
+      const context = makeContext(NEW_EXT_PATH);
+      const scriptBase = getHookScriptPath(context);
+
+      const expectedNodeSegment = toGitBashPath(NVM4W_NODE_PATH);
+      expect(scriptBase.startsWith(`${expectedNodeSegment} `)).toBe(true);
+      expect(scriptBase.endsWith("/hooks/session-state.js")).toBe(true);
+      expect(scriptBase.startsWith('"')).toBe(false);
+    }
+  );
 });
