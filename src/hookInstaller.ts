@@ -69,7 +69,11 @@ export function getHookScriptPath(context: vscode.ExtensionContext): string {
 
     const nodePath = toGitBashPath(resolveNodeBinary());
     const nodeSegment = nodePath.includes(" ") ? `"${nodePath}"` : nodePath;
-    return `${nodeSegment} ${toGitBashPath(hookPath)}`;
+    const hookScriptPath = toGitBashPath(hookPath);
+    const hookScriptSegment = hookScriptPath.includes(" ")
+      ? `"${hookScriptPath}"`
+      : hookScriptPath;
+    return `${nodeSegment} ${hookScriptSegment}`;
   }
 
   return `node ${hookPath}`;

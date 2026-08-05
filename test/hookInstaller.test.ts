@@ -11,7 +11,7 @@
  *  - No spurious write happens when paths are already current
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "fs";
 import { execSync } from "child_process";
 
@@ -491,4 +491,222 @@ describe("getHookScriptPath — node binary quoting", () => {
       expect(scriptBase.startsWith('"')).toBe(false);
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// getHookScriptPath — hook-script (extensionPath) quoting (issue #106)
+//
+// getHookScriptPath() quote-guards the resolved node-binary segment when it
+// contains a space, but currently returns the hook-script segment — built
+// from context.extensionPath via toGitBashPath() — completely unquoted. When
+// the extension is installed under a path containing a space (a spaced
+// username, a spaced VS Code extensions directory), the unquoted segment
+// gets split into multiple shell arguments and the hook fails to start.
+//
+// These tests pin the fix: the hook-script segment must be independently
+// quote-wrapped whenever context.extensionPath contains a space, regardless
+// of whether the node-binary segment also needs quoting — and neither
+// segment should be quoted when neither contains a space, so the fix doesn't
+// over-quote.
+//
+// process.platform is stubbed to "win32" for the duration of this block
+// (rather than gated with it.runIf) so these tests actually execute — and
+// actually gate the merge — on this project's ubuntu-latest CI runner, not
+// just on a contributor's Windows machine. This is safe: getHookScriptPath()
+// branches on process.platform at call time, and the git-bash string
+// conversion (toGitBashPath, both the implementation's and this file's
+// mirror of it at module scope) is pure regex/string manipulation with no
+// dependency on the actual host OS's path.join separator — any separator
+// path.join happens to choose is normalized away by the global "\\" -> "/"
+// replace, so the expected strings below are identical on Windows and Linux.
+// ---------------------------------------------------------------------------
+
+describe("getHookScriptPath — hook-script (extensionPath) quoting", () => {
+  const SPACED_NODE_PATH = "C:\\Users\\John Doe\\AppData\\Roaming\\nvm\\v20.11.0\\node.exe";
+  const NVM4W_NODE_PATH = "C:\\nvm4w\\nodejs\\node.exe";
+
+  // Extension install path containing a space — e.g. a spaced Windows
+  // username, or VS Code's default extensions directory when the user
+  // profile itself has a space in it.
+  const SPACED_EXT_PATH = "C:\\Users\\Some User\\extension";
+  const UNSPACED_EXT_PATH = NEW_EXT_PATH; // already unspaced per the block above
+
+  function expectedHookSegment(extensionPath: string): string {
+    // Mirrors path.join(context.extensionPath, "hooks", "session-state.js")
+    // on win32, followed by the same git-bash conversion applied elsewhere
+    // in this file (toGitBashPath), so the expectation is independent of how
+    // the implementation is written.
+    return toGitBashPath(`${extensionPath}\\hooks\\session-state.js`);
+  }
+
+  function mockUnspacedNodeResolution(): void {
+    // PATH lookup fails; Program Files is absent but nvm4w is present —
+    // resolves via the second common-path candidate, which has no space.
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("command not found");
+    });
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation(
+      (candidate: string) => candidate === NVM4W_NODE_PATH
+    );
+  }
+
+  function mockSpacedNodeResolution(): void {
+    vi.mocked(execSync).mockReturnValue(`${SPACED_NODE_PATH}\r\n`);
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation(
+      (candidate: string) => candidate === SPACED_NODE_PATH
+    );
+  }
+
+  let realPlatform: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    vi.mocked(execSync).mockReset();
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockReset();
+    realPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+  });
+
+  afterEach(() => {
+    if (realPlatform) {
+      Object.defineProperty(process, "platform", realPlatform);
+    }
+  });
+
+  it("quotes the hook-script segment when extensionPath contains a space, independently of node-binary quoting", () => {
+    mockUnspacedNodeResolution();
+
+    const context = makeContext(SPACED_EXT_PATH);
+    const scriptBase = getHookScriptPath(context);
+
+    const hookSegment = expectedHookSegment(SPACED_EXT_PATH);
+    const nodeSegment = toGitBashPath(NVM4W_NODE_PATH);
+
+    // Hook-script segment must be quote-wrapped.
+    expect(scriptBase).toContain(`"${hookSegment}"`);
+    // Node-binary segment has no space, so it must remain unquoted.
+    expect(scriptBase).not.toContain(`"${nodeSegment}"`);
+    expect(scriptBase).toContain(nodeSegment);
+  });
+
+  it("quotes both segments independently when both the node path and extensionPath contain spaces", () => {
+    mockSpacedNodeResolution();
+
+    const context = makeContext(SPACED_EXT_PATH);
+    const scriptBase = getHookScriptPath(context);
+
+    const hookSegment = expectedHookSegment(SPACED_EXT_PATH);
+    const nodeSegment = toGitBashPath(SPACED_NODE_PATH);
+
+    // This is the case the current code gets wrong: it only quotes the
+    // node-binary segment and leaves the hook-script segment bare.
+    expect(scriptBase).toContain(`"${nodeSegment}"`);
+    expect(scriptBase).toContain(`"${hookSegment}"`);
+  });
+
+  it("quotes neither segment when neither the node path nor extensionPath contains a space", () => {
+    mockUnspacedNodeResolution();
+
+    const context = makeContext(UNSPACED_EXT_PATH);
+    const scriptBase = getHookScriptPath(context);
+
+    const hookSegment = expectedHookSegment(UNSPACED_EXT_PATH);
+    const nodeSegment = toGitBashPath(NVM4W_NODE_PATH);
+
+    // Regression guard: the fix must not over-quote when there's nothing
+    // to protect.
+    expect(scriptBase).not.toContain('"');
+    expect(scriptBase).toBe(`${nodeSegment} ${hookSegment}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reconcileHookPaths / hooksUpToDate — quoted script base round-trip
+// (issue #106 regression guard)
+//
+// Quoting the hook-script segment in getHookScriptPath() changes the exact
+// string written into, and compared against, ~/.claude/settings.json. This
+// guard exercises hooksUpToDate/reconcileHookPaths against script bases
+// built from spaced extension paths (via the real getHookScriptPath(), not
+// hardcoded fixtures) so that if a future quoting fix breaks the
+// stale/current comparison or the trailing-action-arg split, this test goes
+// red alongside it. It is expected to pass both before and after the
+// extensionPath-quoting fix lands — its job is to catch collateral damage,
+// not to pin the fix itself.
+// ---------------------------------------------------------------------------
+
+describe("reconcileHookPaths — quoted script base round-trip (issue #106 regression guard)", () => {
+  const OLD_SPACED_EXT_PATH =
+    "C:\\Users\\Some User\\.vscode\\extensions\\conductor-0.1.0";
+  const NEW_SPACED_EXT_PATH =
+    "C:\\Users\\Some User\\.vscode\\extensions\\conductor-0.2.0";
+
+  let realPlatform: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    vi.mocked(execSync).mockReset();
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockReset();
+    // Deterministic node-binary resolution: PATH lookup fails and no
+    // common-path candidate exists, so resolveNodeBinary falls through to
+    // its hardcoded last-resort default for both old and new contexts —
+    // isolating the variable under test to the extensionPath tail only.
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("command not found");
+    });
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    realPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+  });
+
+  afterEach(() => {
+    if (realPlatform) {
+      Object.defineProperty(process, "platform", realPlatform);
+    }
+  });
+
+  it("detects stale vs current script bases built from spaced extension paths", () => {
+    const oldScriptBase = getHookScriptPath(makeContext(OLD_SPACED_EXT_PATH));
+    const newScriptBase = getHookScriptPath(makeContext(NEW_SPACED_EXT_PATH));
+
+    // Sanity: old and new script bases must differ, or the assertions below
+    // are vacuous.
+    expect(oldScriptBase).not.toBe(newScriptBase);
+
+    const oldSettings = makeSettingsWithHooks(oldScriptBase);
+    const newSettings = makeSettingsWithHooks(newScriptBase);
+
+    expect(hooksUpToDate(oldSettings, newScriptBase)).toBe(false);
+    expect(hooksUpToDate(newSettings, newScriptBase)).toBe(true);
+  });
+
+  it("preserves the trailing action arg when reconciling a quoted script base", () => {
+    const oldScriptBase = getHookScriptPath(makeContext(OLD_SPACED_EXT_PATH));
+    const newScriptBase = getHookScriptPath(makeContext(NEW_SPACED_EXT_PATH));
+
+    const settings = makeSettingsWithHooks(oldScriptBase);
+    reconcileHookPaths(settings, newScriptBase);
+
+    const hooks = settings.hooks as Record<string, unknown[]>;
+    const notifCmd = (
+      (hooks.Notification[0] as Record<string, unknown[]>).hooks[0] as Record<
+        string,
+        string
+      >
+    ).command;
+    const submitCmd = (
+      (hooks.UserPromptSubmit[0] as Record<string, unknown[]>).hooks[0] as Record<
+        string,
+        string
+      >
+    ).command;
+    const stopCmd = (
+      (hooks.Stop[0] as Record<string, unknown[]>).hooks[0] as Record<
+        string,
+        string
+      >
+    ).command;
+
+    expect(notifCmd).toBe(`${newScriptBase} idle`);
+    expect(submitCmd).toBe(`${newScriptBase} active`);
+    expect(stopCmd).toBe(`${newScriptBase} stop`);
+  });
 });
