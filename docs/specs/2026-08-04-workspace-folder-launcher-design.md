@@ -124,9 +124,9 @@ or 1 root. Implemented via a VS Code `when`-clause context key (e.g.
 `claudeConductor.hasMultiRootWorkspace`) set with
 `vscode.commands.executeCommand('setContext', ...)` at extension activation
 and on `vscode.workspace.onDidChangeWorkspaceFolders`. No `setContext` call
-exists anywhere in `src/` today (verified via `git grep -n "setContext" --
-src/`, zero matches, checked 2026-08-04) — this is new plumbing, not reuse of
-an existing pattern.
+exists anywhere in `src/` today (verified via `git grep "setContext" src/`,
+zero matches, checked 2026-08-04) — this is new plumbing, not reuse of an
+existing pattern.
 
 **FR-7.** A new command `claudeConductor.launchInWorkspaceFolder` is
 registered (title: "Claude Conductor: Launch Session in Workspace Folder..."),
@@ -153,9 +153,9 @@ folder list and not relevant to native VS Code workspace folders.
 **NFR-10.** A folder removed from the workspace while a session is active for
 it: the row disappears on the next `onDidChangeWorkspaceFolders` re-render,
 but the running terminal itself is untouched. This matches existing behavior
-elsewhere — verified-absent: `git grep -n "onDidChangeWorkspaceFolders" --
-src/` returns no matches, and `git grep -n "closeSession(" -- src/` returns
-exactly two matches (both checked 2026-08-04): the method definition
+elsewhere — verified-absent: `git grep "onDidChangeWorkspaceFolders" src/`
+returns no matches, and `git grep -n "closeSession(" src/` returns exactly
+two matches (both checked 2026-08-04): the method definition
 (`src/sessionManager.ts:199`) and its sole call site inside the explicit
 `claudeConductor.closeSession` command handler (`src/extension.ts:205-210`).
 No code path closes or kills a session in response to a folder-list change;
@@ -244,7 +244,7 @@ gate.
 ## 4. Risks
 
 - **New `setContext` plumbing is untested territory in this codebase**
-  (verified via `git grep -n "setContext" -- src/`, zero matches, checked
+  (verified via `git grep "setContext" src/`, zero matches, checked
   2026-08-04 — see FR-6). A mis-wired `when` clause could either always-hide
   or always-show the section. Mitigated by the new, purpose-built visibility
   `when`-clause test described in NFR-12(c) — note this is separate coverage
@@ -294,14 +294,20 @@ this repo's local-time convention, not an off-by-one error.
 **Re-verification pass (CodeRabbit review, PR #105, 2026-08-04).** This
 document was re-checked against the working tree at worktree `HEAD`
 `1f1208e`, one commit ahead of the `7fee18b` base above. `git diff --stat
-7fee18b..HEAD` shows only `docs/README.md` and this spec file changed between
-the two commits — no cited source file (`src/**`, `test/**`, `package.json`,
+7fee18b..HEAD` shows only the `docs/README.md` index (a different file from
+the root `README.md` this spec cites) and this spec file itself changed
+between the two commits. `git log --oneline 7fee18b..HEAD -- README.md
+scripts/extract-changelog.js docs/release-strategy.md
+test/extract-changelog.test.ts` returns no commits, confirming none of this
+spec's other cited files (`src/**`, `test/**`, `package.json`, the root
 `README.md`, `docs/release-strategy.md`, `scripts/extract-changelog.js`)
-moved, so every line-number citation above remains valid at `1f1208e`. The
+changed either — every line-number citation above remains valid at
+`1f1208e`. The
 `setContext`, `onDidChangeWorkspaceFolders`, and `closeSession(` claims in
-FR-6, NFR-10, and § 4 Risks were re-run as `git grep -n "<pattern>" -- src/`
-on this date, and their citations were rewritten to name the exact command
-and result rather than "repo-wide grep." The `vscode.workspace.workspaceFolders`
+FR-6, NFR-10, and § 4 Risks were re-run as `git grep "<pattern>" src/` (or
+`git grep -n` where line numbers were needed) on this date, and their
+citations were rewritten to name the exact command and result rather than
+"repo-wide grep." The `vscode.workspace.workspaceFolders`
 type claim in NFR-13 was verified by fetching
 `https://github.com/microsoft/vscode/blob/main/src/vscode-dts/vscode.d.ts`
 on 2026-08-04 and reading the property's declaration and doc comment
