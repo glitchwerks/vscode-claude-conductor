@@ -2,11 +2,52 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import * as child_process from "child_process";
 
 const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 const STATE_DIR = path.join(os.homedir(), ".claude", "session-state");
 const HOOK_MARKER = "session-state.js";
 const SETUP_DECLINED_KEY = "claudeConductor.hookSetupDeclined";
+
+/**
+ * Resolve the Node.js binary from PATH, then fall back to common install locations.
+ */
+export function resolveNodeBinary(deps?: {
+  execSync?: typeof child_process.execSync;
+  existsSync?: typeof fs.existsSync;
+}): string {
+  const execSync = deps?.execSync ?? child_process.execSync;
+  const existsSync = deps?.existsSync ?? fs.existsSync;
+  const isWin32 = process.platform === "win32";
+
+  try {
+    const stdout = execSync(isWin32 ? "where node" : "which node", {
+      encoding: "utf8",
+    });
+    const resolvedPath = stdout.split(/\r\n|\n|\r/)[0].trim();
+    if (resolvedPath && existsSync(resolvedPath)) {
+      return resolvedPath;
+    }
+  } catch {
+    // Fall through to common install locations.
+  }
+
+  const commonPaths = isWin32
+    ? ["C:\\Program Files\\nodejs\\node.exe", "C:\\nvm4w\\nodejs\\node.exe"]
+    : ["/usr/local/bin/node", "/usr/bin/node"];
+
+  for (const candidate of commonPaths) {
+    try {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
+      // Continue probing so resolution always reaches a safe fallback.
+    }
+  }
+
+  return isWin32 ? "C:\\Program Files\\nodejs\\node.exe" : "node";
+}
 
 /**
  * Get the path to our hook script, using Unix-style paths for git bash compatibility.
@@ -19,10 +60,20 @@ export function getHookScriptPath(context: vscode.ExtensionContext): string {
   const hookPath = path.join(context.extensionPath, "hooks", "session-state.js");
 
   if (process.platform === "win32") {
-    // Convert Windows path to git bash style: C:\Users\... → /c/Users/...
-    const drive = hookPath[0].toLowerCase();
-    const rest = hookPath.slice(2).replace(/\\/g, "/");
-    return `/c/PROGRA~1/nodejs/node.exe /${drive}${rest}`;
+    const toGitBashPath = (windowsPath: string): string => {
+      // Convert Windows path to git bash style: C:\Users\... → /c/Users/...
+      const drive = windowsPath[0].toLowerCase();
+      const rest = windowsPath.slice(2).replace(/\\/g, "/");
+      return `/${drive}${rest}`;
+    };
+
+    const nodePath = toGitBashPath(resolveNodeBinary());
+    const nodeSegment = nodePath.includes(" ") ? `"${nodePath}"` : nodePath;
+    const hookScriptPath = toGitBashPath(hookPath);
+    const hookScriptSegment = hookScriptPath.includes(" ")
+      ? `"${hookScriptPath}"`
+      : hookScriptPath;
+    return `${nodeSegment} ${hookScriptSegment}`;
   }
 
   return `node ${hookPath}`;
