@@ -133,11 +133,19 @@ registered (title: "Claude Conductor: Launch Session in Workspace Folder..."),
 shown in the command palette. It shows a `vscode.window.showQuickPick`
 populated from the normalized `folders` value from NFR-13 (name + path per
 item, sourced from `vscode.workspace.workspaceFolders`), then calls
-`sessionManager.launchSession(picked.uri.fsPath)` on selection. Structurally
-mirrors `showQuickPick()` in `src/quickPick.ts:14-92`, but sources items from
-that normalized `folders` value instead of `getAllFolders()`
-(`src/folderSource.ts:52-92`). Implemented in
-`src/extension.ts` alongside the other command registrations
+`sessionManager.launchSession(picked.uri.fsPath)` on selection. The command
+handler must reuse `claudeConductor.openSession`'s existing result handling
+verbatim (`src/extension.ts:181-188`, read directly), not call
+`launchSession()` and drop the result: on `{ ok: true }`, call
+`existenceCache.markPresent(folderPath)`; on `{ ok: false, reason: "missing"
+}`, call `existenceCache.markMissing(folderPath)` and
+`vscode.window.showErrorMessage(result.message)`. Without this, picking a
+workspace folder that has been deleted on disk since the workspace was
+opened would neither update `existenceCache` nor surface the existing
+missing-folder error message. Structurally mirrors `showQuickPick()` in
+`src/quickPick.ts:14-92`, but sources items from that normalized `folders`
+value instead of `getAllFolders()` (`src/folderSource.ts:52-92`).
+Implemented in `src/extension.ts` alongside the other command registrations
 (`src/extension.ts:178-300`), not in `src/quickPick.ts` — `quickPick.ts` is
 read as a structural model, not modified.
 
@@ -163,11 +171,13 @@ No code path closes or kills a session in response to a folder-list change;
 
 **NFR-11.** The missing-folder-on-disk guard in
 `SessionManager.launchSession()` (`src/sessionManager.ts:100-109`) is reused
-as-is for this feature — no new missing-folder handling needed, since
-`launchSession()` already returns `{ ok: false, reason: "missing" }` and
-existing callers already know how to surface that. See the existing
-`markMissing` + `showErrorMessage` caller in the `claudeConductor.openSession`
-command handler (`src/extension.ts:181-188`) as the pattern to follow.
+as-is for this feature: `launchSession()` already returns `{ ok: false,
+reason: "missing" }`, and the new command reuses that handling verbatim per
+FR-7, which mandates calling `existenceCache.markMissing(folderPath)` and
+`vscode.window.showErrorMessage(result.message)` on that branch — the same
+handling `claudeConductor.openSession` performs at
+`src/extension.ts:181-188`. No separate missing-folder design is needed
+here; FR-7 is the normative requirement, this note just cross-references it.
 
 **NFR-12 — test coverage.** This repo uses a test-first split (tests before
 implementation). Tests needed:
@@ -204,7 +214,7 @@ in `test/extension.commandArgs.test.ts`, which already exercises
 file's header comment, `test/extension.commandArgs.test.ts:1-17`), rather
 than a new test file.
 
-**NFR-13 — undefined-safe `workspaceFolders` access.**
+**NFR-13 — undefined-safe, always-fresh `workspaceFolders` access.**
 `vscode.workspace.workspaceFolders` is typed `readonly WorkspaceFolder[] |
 undefined`, and its doc comment states it is `undefined` when no workspace
 has been opened, not an empty array (`"List of workspace folders (0-N) that
@@ -212,13 +222,27 @@ are open in the editor. undefined when no workspace has been opened."` —
 `https://github.com/microsoft/vscode/blob/main/src/vscode-dts/vscode.d.ts`,
 fetched 2026-08-04). None of FR-2's tree provider, FR-6's visibility
 context-key logic, or FR-7's QuickPick population may read
-`vscode.workspace.workspaceFolders` directly — all three read one shared,
-normalized value, declared once: `const folders =
-vscode.workspace.workspaceFolders ?? []`. This guarantees `.length` and
-iteration in FR-2/FR-6/FR-7 never dereference `undefined`, and keeps the
-three call sites consistent with each other and with NFR-9's empty-state
-handling. Testable: a reviewer can confirm no call site outside that single
-normalization point reads `vscode.workspace.workspaceFolders` directly.
+`vscode.workspace.workspaceFolders` directly — all three call one shared
+helper, e.g. `function getWorkspaceFolders(): readonly
+vscode.WorkspaceFolder[] { return vscode.workspace.workspaceFolders ?? [];
+}`, binding its result to a local `folders` at the point of use. This must
+be a recompute-per-operation read, not a one-time snapshot: FR-6's
+`setContext` update, the tree provider's `getChildren()`, and FR-7's
+QuickPick population each call the helper fresh — at extension activation,
+on every `vscode.workspace.onDidChangeWorkspaceFolders` event (FR-6), and on
+every tree refresh (NFR-10) — so a folder added or removed after activation
+is reflected on the next read of each, not only after an extension reload. A
+module-level `const folders = vscode.workspace.workspaceFolders ?? []`
+computed once at activation would go stale the moment
+`onDidChangeWorkspaceFolders` fires, breaking FR-6's visibility update and
+the row-disappears-on-re-render behavior NFR-10 requires of the tree
+section. This guarantees `.length` and iteration in FR-2/FR-6/FR-7 never
+dereference `undefined`, and keeps the three call sites consistent with each
+other, with FR-6's re-render-on-change requirement, and with NFR-9's
+empty-state handling. Testable: a reviewer can confirm no call site outside
+that shared helper reads `vscode.workspace.workspaceFolders` directly, and
+that none of the three consumers caches the helper's result across an
+`onDidChangeWorkspaceFolders` event.
 
 ## 3. Scope boundaries
 
