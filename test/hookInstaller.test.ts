@@ -529,7 +529,14 @@ describe("getHookScriptPath — hook-script (extensionPath) quoting", () => {
   // username, or VS Code's default extensions directory when the user
   // profile itself has a space in it.
   const SPACED_EXT_PATH = "C:\\Users\\Some User\\extension";
-  const UNSPACED_EXT_PATH = NEW_EXT_PATH; // already unspaced per the block above
+  // A plain win32-style literal, independent of NEW_EXT_PATH (which
+  // branches on the REAL process.platform at module-load time — on
+  // ubuntu-latest CI that's "linux", so NEW_EXT_PATH resolves to an
+  // already-POSIX-style path, and running that through toGitBashPath()
+  // under this block's win32 stub mangles it). This block stubs
+  // process.platform for its own duration, so its fixtures must be
+  // self-contained win32 literals, matching SPACED_EXT_PATH above.
+  const UNSPACED_EXT_PATH = "C:\\Users\\chris\\.vscode\\extensions\\conductor-0.2.0";
 
   function expectedHookSegment(extensionPath: string): string {
     // Mirrors path.join(context.extensionPath, "hooks", "session-state.js")
