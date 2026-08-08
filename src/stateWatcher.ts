@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import { SessionManager } from "./sessionManager";
 import { getEnableNotifications } from "./config";
+import { log } from "./output";
 
 const STATE_DIR = path.join(os.homedir(), ".claude", "session-state");
 
@@ -12,20 +13,6 @@ interface SessionState {
   cwd: string;
   sessionId: string;
   timestamp: number;
-}
-
-/** Shared output channel for diagnostic logging — created once, reused everywhere. */
-let _outputChannel: vscode.OutputChannel | undefined;
-
-function getOutputChannel(): vscode.OutputChannel {
-  if (!_outputChannel) {
-    _outputChannel = vscode.window.createOutputChannel("Claude Conductor");
-  }
-  return _outputChannel;
-}
-
-function log(message: string): void {
-  getOutputChannel().appendLine(`[${new Date().toISOString()}] ${message}`);
 }
 
 /**
@@ -64,7 +51,6 @@ export class StateWatcher implements vscode.Disposable {
   private static readonly POLL_INTERVAL_MS = 2000;
 
   constructor(private readonly sessionManager: SessionManager) {
-    this._disposables.push(getOutputChannel());
     this._ensureStateDir();
     this._startWatching();
     this._startPolling();
@@ -387,7 +373,6 @@ export class StateWatcher implements vscode.Disposable {
     for (const d of this._disposables) {
       d.dispose();
     }
-    _outputChannel = undefined;
     this._idleSessions.clear();
     this._notifiedSessions.clear();
     this._fileTimestamps.clear();
