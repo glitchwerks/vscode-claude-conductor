@@ -132,6 +132,13 @@ export enum TerminalLocation {
   Editor = 2,
 }
 
+export enum FileType {
+  Unknown = 0,
+  File = 1,
+  Directory = 2,
+  SymbolicLink = 64,
+}
+
 // ---------------------------------------------------------------------------
 // RelativePattern
 // ---------------------------------------------------------------------------
@@ -251,6 +258,10 @@ export const workspace = {
   createFileSystemWatcher: vi.fn().mockImplementation(() => new FileSystemWatcherStub()),
 
   openTextDocument: vi.fn().mockResolvedValue({}),
+
+  fs: {
+    stat: vi.fn(),
+  },
 };
 
 // ---------------------------------------------------------------------------
