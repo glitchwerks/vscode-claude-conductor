@@ -191,7 +191,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     const expectedType = isFolder ? vscode.FileType.Directory : vscode.FileType.File;
-    if (stat.type !== expectedType) {
+    if ((stat.type & expectedType) === 0) {
       void vscode.window.showErrorMessage(
         `Unable to open Claude here because the selected resource is no longer a ${isFolder ? "folder" : "file"}: ${uri.fsPath}`
       );
