@@ -22,17 +22,18 @@ skills_relevant:
 
 Launching a Claude Conductor session today requires going through the sidebar
 (Active Sessions / Favorites / Recent Projects, via `claudeConductor.openSession`)
-or the Quick Pick (`claudeConductor.addFolder`) (`#107`, fetched 2026-08-07,
-§ Context). Neither path starts from a folder or file the user is already
-looking at in VS Code's built-in Explorer pane. VS Code's own "Open in
-Integrated Terminal" Explorer context-menu item is the closest existing
-convention this feature mirrors (`#107` § Context).
+or the Quick Pick (`claudeConductor.addFolder`) (`#107`, open, fetched
+2026-08-07, § Context). Neither path starts from a folder or file the user
+is already looking at in VS Code's built-in Explorer pane. VS Code's own
+"Open in Integrated Terminal" Explorer context-menu item is the closest
+existing convention this feature mirrors (`#107`, open, fetched 2026-08-07,
+§ Context).
 
 This is a new user-visible context-menu surface, which this repo's
-`CLAUDE.md` § Spec-Driven Development requires a spec for even when the
-change itself is small — hence this document, matching `#107`'s own
-Acceptance Criteria item "Spec written and reviewed ... before implementation
-begins."
+`CLAUDE.md:L16-L18` requires a spec for even when the change itself is
+small — hence this document, per the Acceptance Criteria of `#107` (open,
+fetched 2026-08-07), item "Spec written and reviewed ... before
+implementation begins."
 
 ## 2. Requirements
 
@@ -49,11 +50,13 @@ thin entry points. `explorer/context` is a new menu group in this repo's
 `view/item/context` only (`package.json:L128-L208`), both scoped to the
 Claude Conductor sidebar's own tree views, not the Explorer.
 
-**FR-2.** The menu contribution shows on both files and folders — `#107`'s
-Acceptance Criteria require both a folder-invoked and a file-invoked
-behavior, so the clause must not restrict to one or the other. **Resolved
-(OQ-2, 2026-08-07):** `contributes.menus["explorer/context"]` gets two
-entries, each invoking a **different command ID** (FR-1) — `"command":
+**FR-2.** The menu contribution shows on both files and folders — per the
+Acceptance Criteria of `#107` (open, fetched 2026-08-07), both a
+folder-invoked and a file-invoked behavior are required, so the clause must
+not restrict to one or the other. **Resolved (OQ-2, 2026-08-07; PR #108,
+open, fetched 2026-08-07, § Key decisions):**
+`contributes.menus["explorer/context"]` gets two entries, each invoking a
+**different command ID** (FR-1) — `"command":
 "claudeConductor.openHere"` with `"when": "explorerResourceIsFolder"`, and
 `"command": "claudeConductor.openHereFromFile"` with `"when":
 "!explorerResourceIsFolder"`. Both entries share the same title ("Open
@@ -82,9 +85,9 @@ without any new logic.
 **FR-4.** Invoking `claudeConductor.openHereFromFile` (the file-targeted
 command, FR-1/FR-2) launches or focuses a session rooted at the file's
 **parent** folder — `path.dirname(uri.fsPath)` — then proceeds as FR-3's
-`launchSession` call. This matches `#107`'s Acceptance Criteria ("Invoked
-on a file → launches/focuses a session rooted at the file's parent
-folder").
+`launchSession` call. This matches the Acceptance Criteria of `#107` (open,
+fetched 2026-08-07): "Invoked on a file → launches/focuses a session
+rooted at the file's parent folder".
 
 **FR-5.** Both commands read `uri.fsPath` directly from the `vscode.Uri`
 argument VS Code passes for Explorer context-menu invocations. Neither
@@ -92,21 +95,23 @@ routes through the existing `resolvePathArg()` helper
 (`src/extension.ts:L49-L61`), whose `obj.path` fallback would read
 `vscode.Uri.path` — the URI-encoded POSIX-style path, not the real
 filesystem path. On Windows this can diverge from `.fsPath` (drive-letter
-casing, separators), per `#107` § Technical Notes, which calls this out
-explicitly as the reason a naive reuse of `resolvePathArg()` would be wrong
-for this command. `resolvePathArg()` itself is left unmodified; the new
+casing, separators), per `#107` (open, fetched 2026-08-07) § Technical
+Notes, which calls this out explicitly as the reason a naive reuse of
+`resolvePathArg()` would be wrong for this command. `resolvePathArg()` itself is left unmodified; the new
 commands get their own small, shared arg-resolution path.
 
 **FR-6.** File-vs-folder branching is determined primarily by **which
 command fired** — `claudeConductor.openHere` (folder, FR-3) or
 `claudeConductor.openHereFromFile` (file, FR-4) — each registration passing
 its `isFolder` boolean into the one shared implementation (FR-1). **Resolved
-(OQ-2, 2026-08-07):** this is what makes the FR-2 menu split load-bearing
-rather than cosmetic — the command ID is the only menu-contribution-level
-channel available for handing that context to the handler (FR-2's
-citation). `vscode.workspace.fs.stat(uri)`, per `#107` § Technical Notes,
-is retained but demoted from primary type-detection to a staleness/validity
-check per Risk 2: it confirms the target still exists and, incidentally,
+(OQ-2, 2026-08-07; PR #108, open, fetched 2026-08-07, § Key decisions):**
+this is what makes the FR-2 menu split load-bearing rather than cosmetic —
+the command ID is the only menu-contribution-level channel available for
+handing that context to the handler (FR-2's citation).
+`vscode.workspace.fs.stat(uri)`, per `#107` (open, fetched 2026-08-07)
+§ Technical Notes, is retained but demoted from primary type-detection to a
+staleness/validity check per Risk 2: it confirms the target still exists
+and, incidentally,
 that its `FileType` (`FileType.Directory` vs `FileType.File`) still matches
 what the invoked command assumed. If `stat` rejects (target deleted or
 became inaccessible between right-click and invocation), or its result
@@ -118,21 +123,22 @@ information — see § 4 Risks.
 
 **FR-7.** When VS Code invokes the command with multiple Explorer items
 selected, it acts on the **first/clicked item only** — no per-item fan-out
-— per `#107`'s Acceptance Criteria. The command implementation must accept
-and ignore any additional argument VS Code passes for the rest of the
-selection (see § 4 Risk 3 for the unverified argument-shape detail this
-depends on).
+— per the Acceptance Criteria of `#107` (open, fetched 2026-08-07). The
+command implementation must accept and ignore any additional argument VS
+Code passes for the rest of the selection (see § 4 Risk 3 for the
+unverified argument-shape detail this depends on).
 
-**FR-8.** `README.md` § Commands is updated to list the new command (per
-`CLAUDE.md` § README Maintenance and `#107`'s Acceptance Criteria "`README.md`
-updated if this changes documented usage/commands"). The current § Commands
+**FR-8.** `README.md` § Commands is updated to list the new command, per
+the Acceptance Criteria of `#107` (open, fetched 2026-08-07): "`README.md`
+updated if this changes documented usage/commands". The current § Commands
 section (`README.md:L98-L106`) only lists Command-Palette-invokable
 commands; this entry should be listed separately since FR-9 excludes both
 `openHere*` commands from the Command Palette entirely (`"when": "false"`).
 
 **FR-9 (NFR).** Both commands are discoverable only from the Explorer
 right-click context menu, not the Command Palette. **Resolved (OQ-1,
-2026-08-07):** `package.json`'s `contributes.commands` entries for
+2026-08-07; PR #108, open, fetched 2026-08-07, § Key decisions):**
+`package.json`'s `contributes.commands` entries for
 **both** `claudeConductor.openHere` and `claudeConductor.openHereFromFile`
 (FR-1) are each paired with an explicit `commandPalette` `"when": "false"`
 menu clause:
@@ -183,7 +189,8 @@ this spec's scope.
   FR-9).
 - `README.md` and `CHANGELOG.md` updates.
 
-**Out of scope** (per `#107` § Out of Scope, verbatim categories):
+**Out of scope** (per `#107` (open, fetched 2026-08-07) § Out of Scope,
+verbatim categories):
 - Left-click-to-launch behavior on folders — right-click context menu only.
 - Launching a session per item when multiple files/folders are
   multi-selected (no fan-out; see FR-7).
@@ -196,7 +203,8 @@ this spec's scope.
 Not decided by this spec, deferred to implementation: exact `group` value
 (e.g. `navigation` vs a custom group) and its ordering position within
 `explorer/context`, and whether an icon is attached to the menu item.
-Neither is called out in `#107`'s Acceptance Criteria, and neither changes
+Neither is called out in the Acceptance Criteria of `#107` (open, fetched
+2026-08-07), and neither changes
 observable command behavior — both are cosmetic menu-placement choices,
 low-risk to leave to the implementer to decide against the shipped VS Code
 menu at the time.
@@ -237,18 +245,20 @@ multi-select invocation — before relying on it.
 
 ## 5. Open questions
 
-1. **Resolved** (OQ-1, 2026-08-07): both `claudeConductor.openHere` and
+1. **Resolved** (OQ-1, 2026-08-07; PR #108, open, fetched 2026-08-07,
+   § Key decisions): both `claudeConductor.openHere` and
    `claudeConductor.openHereFromFile` (FR-1) are explicitly excluded from
    the Command Palette via a `commandPalette` `"when": "false"` clause per
-   command ID (see FR-9). The issue's Out-of-Scope list named "command
-   palette entry" as excluded, which was ambiguous between "don't
-   promote/document it there" (satisfied by the existing sibling commands'
-   no-op pattern) and "don't let it appear there at all" (needs the
-   explicit `when: "false"` clause). Decided explicitly by the feature
-   owner in favor of the stricter reading, to make the "Explorer pane only"
-   scope airtight rather than rely on an accidental precedent set by other
-   commands.
-2. **Resolved** (OQ-2, 2026-08-07): the `explorer/context` `when` clause
+   command ID (see FR-9). The Out-of-Scope list of `#107` (open, fetched
+   2026-08-07) named "command palette entry" as excluded, which was
+   ambiguous between "don't promote/document it there" (satisfied by the
+   existing sibling commands' no-op pattern) and "don't let it appear
+   there at all" (needs the explicit `when: "false"` clause). Decided
+   explicitly by the feature owner in favor of the stricter reading, to
+   make the "Explorer pane only" scope airtight rather than rely on an
+   accidental precedent set by other commands.
+2. **Resolved** (OQ-2, 2026-08-07; PR #108, open, fetched 2026-08-07,
+   § Key decisions): the `explorer/context` `when` clause
    uses `explorerResourceIsFolder` to select between **two different
    command IDs** (FR-1/FR-2) — `claudeConductor.openHere`
    (`"when": "explorerResourceIsFolder"`) and
@@ -273,9 +283,16 @@ multi-select invocation — before relying on it.
 ## Verification note
 
 Repo claims in this document were read at commit `7fee18b`
-(`git -C . rev-parse HEAD`, 2026-08-07) on `main`. `#107` was fetched via
+(`git -C . rev-parse HEAD`, 2026-08-07) on `main`, including
+`CLAUDE.md:L16-L18` — unchanged between `7fee18b` and this document's own
+commit (`git -C . diff 7fee18b d446b9f -- CLAUDE.md`, empty, 2026-08-07).
+`#107` was fetched via
 `gh issue view 107 --repo glitchwerks/vscode-claude-conductor` on
-2026-08-07 and is open. `explorerResourceIsFolder` (FR-2) was confirmed via
+2026-08-07 and is open. PR #108 (this pull request) was fetched via
+`gh pr view 108 --repo glitchwerks/vscode-claude-conductor` on 2026-08-07
+and is open; its "Key decisions" section in the PR body is the source
+cited above (FR-2, FR-6, FR-9, § 5) for the OQ-1/OQ-2 resolutions.
+`explorerResourceIsFolder` (FR-2) was confirmed via
 https://code.visualstudio.com/api/references/when-clause-contexts (fetched
 2026-08-07). The claim that `contributes.menus` entries carry no field for
 passing extra data to the invoked command (FR-2, FR-6, OQ-2) was confirmed
@@ -288,7 +305,9 @@ other claim.
 
 OQ-1 and OQ-2 were resolved on 2026-08-07 by explicit direction from the
 feature owner as to which reading to take (Command Palette suppression;
-when-clause-driven disambiguation), and the concrete two-command-ID design
-for OQ-2 was derived from the contribution-points citation above rather
-than asserted without checking. The spec's status moved from DRAFT to
-ACCEPTED at the same time.
+when-clause-driven disambiguation) — recorded in PR #108 (open, fetched
+2026-08-07) § Key decisions — and the concrete two-command-ID design for
+OQ-2 was derived from the contribution-points citation above rather than
+asserted without checking. unverified: the spec's status moved from DRAFT
+to ACCEPTED at the same time; no intermediate DRAFT-status commit of this
+file exists in this branch's history to verify the transition against.
