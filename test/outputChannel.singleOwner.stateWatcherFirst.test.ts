@@ -3,17 +3,17 @@
  *
  * Companion to outputChannel.singleOwner.outputFirst.test.ts — see that
  * file's header for full context. This test exercises the "StateWatcher
- * initializes first" ordering, kept in its own file so both output.ts's
- * `_channel` and stateWatcher.ts's `_outputChannel` module singletons start
- * fresh (undefined) here, independent of the other ordering's test run.
+ * initializes first" ordering, kept in its own file so output.ts's
+ * `_channel` module singleton starts fresh (undefined) here, independent
+ * of the other ordering's test run.
  *
  * This is also the direct test for "src/stateWatcher.ts no longer owns a
  * channel": StateWatcher's constructor must not call
  * vscode.window.createOutputChannel itself at all — it must consume
- * output.ts's exported channel/log function instead. If StateWatcher were
- * still creating its own channel (src/stateWatcher.ts:22, current buggy
- * behavior), constructing it before output.ts's getOutputChannel() runs
- * would produce two calls total once output.ts creates its own.
+ * output.ts's exported channel/log function instead. Before the fix,
+ * StateWatcher created its own channel; constructing it before output.ts's
+ * getOutputChannel() runs would have produced two calls total once
+ * output.ts created its own.
  *
  * vi.mock("fs") follows the same pattern as extension.openHere.test.ts —
  * StateWatcher touches the real filesystem (~/.claude/session-state) in its

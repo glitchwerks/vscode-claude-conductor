@@ -5,21 +5,21 @@
  * outputChannel.singleOwner.stateWatcherFirst.test.ts — see the former's
  * header for full context on the duplicate-channel bug.
  *
- * Today, StateWatcher registers its own channel in `_disposables`
- * (src/stateWatcher.ts:67) and disposes it — clearing its own
- * `_outputChannel` singleton — from `dispose()` (src/stateWatcher.ts:383-395).
- * The fix moves disposal ownership fully to output.ts, so StateWatcher.dispose()
- * must stop touching any "Claude Conductor" channel at all.
+ * Before the fix, StateWatcher registered its own channel in its
+ * disposables and disposed it — clearing its own private channel
+ * singleton — from `dispose()`. The fix moves disposal ownership fully to
+ * output.ts, so StateWatcher.dispose() must not touch any "Claude
+ * Conductor" channel at all.
  *
  * This is the regression test for the specific failure mode a naive fix
  * could introduce (fixing the *creation* duplication but leaving disposal
  * wired to StateWatcher, which would tear the shared channel down out from
  * under other consumers such as sessionManager.ts's debugLog calls the
- * moment StateWatcher itself is disposed) — and it is *also* red against
- * today's code: StateWatcher currently owns and disposes its own
+ * moment StateWatcher itself is disposed) — and it was *also* red against
+ * the pre-fix code: StateWatcher used to own and dispose its own
  * "Claude Conductor" channel instance, so the assertion below ("no
  * Claude-Conductor channel instance was disposed by StateWatcher.dispose()")
- * fails today because that instance exists and gets disposed.
+ * failed pre-fix because that instance existed and got disposed.
  *
  * vi.mock("fs") follows the same pattern as extension.openHere.test.ts —
  * StateWatcher touches the real filesystem (~/.claude/session-state) in its

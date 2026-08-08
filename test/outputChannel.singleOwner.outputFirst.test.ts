@@ -1,25 +1,25 @@
 /**
  * Regression test for issue #111 — duplicate "Claude Conductor" output channel.
  *
- * Two independent call sites currently create a
+ * Before the fix, two independent call sites created a
  * `vscode.window.createOutputChannel("Claude Conductor")` channel:
  *   - src/output.ts        (the intended sole owner — creation + disposal)
- *   - src/stateWatcher.ts  (a second, disposal-owning copy, src/stateWatcher.ts:22)
+ *   - src/stateWatcher.ts  (a second, disposal-owning copy)
  *
- * This produces two "Claude Conductor" entries in the Output panel dropdown
+ * That produced two "Claude Conductor" entries in the Output panel dropdown
  * where there should be one. The fix makes src/output.ts the sole owner;
- * src/stateWatcher.ts stops creating its own channel and instead consumes
- * output.ts's shared one.
+ * src/stateWatcher.ts no longer creates its own channel and instead imports
+ * output.ts's shared `log` function (src/stateWatcher.ts:7).
  *
  * This test exercises the "output.ts initializes first" ordering. The
  * complementary "StateWatcher initializes first" ordering lives in
  * outputChannel.singleOwner.stateWatcherFirst.test.ts — kept in a SEPARATE
- * file rather than a second `it()` here because both output.ts's `_channel`
- * and stateWatcher.ts's `_outputChannel` are module-level singletons that
- * persist across every `it()` within one file (see the note in
- * test/debugLog.test.ts about not using vi.resetModules() with the aliased
- * vscode mock); only a fresh per-file module registry gives each ordering a
- * clean, unambiguous "channel not yet created" starting state.
+ * file rather than a second `it()` here because output.ts's `_channel` is a
+ * module-level singleton that persists across every `it()` within one file
+ * (see the note in test/debugLog.test.ts about not using vi.resetModules()
+ * with the aliased vscode mock); only a fresh per-file module registry gives
+ * each ordering a clean, unambiguous "channel not yet created" starting
+ * state.
  *
  * This closes the blind spot in test/debugLog.test.ts:23 and
  * test/sessionManager.debugLog.test.ts:9, which index
@@ -29,9 +29,10 @@
  * Those two files are deliberately left untouched: neither imports
  * src/stateWatcher.ts, and vitest gives each test file its own module
  * registry, so a count assertion added there would read exactly 1 today
- * (green, not red) and prove nothing about the duplicate call site. Once the
- * real fix lands, their existing `.mock.results[0]` index also stays correct
- * (only one channel will ever exist), so no edit to those files is needed.
+ * (green, not red) and prove nothing about the duplicate call site. Now that
+ * the real fix has landed, their existing `.mock.results[0]` index also
+ * stays correct (only one channel will ever exist), so no edit to those
+ * files is needed.
  *
  * vi.mock("fs") follows the same pattern as extension.openHere.test.ts —
  * StateWatcher touches the real filesystem (~/.claude/session-state) in its
