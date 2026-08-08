@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "path";
 import { SessionManager, ActiveSession } from "./sessionManager";
 import { showQuickPick, addFolderPrompt } from "./quickPick";
 import { ActiveSessionsProvider, RecentProjectsProvider, FavoritesProvider } from "./treeView";
@@ -174,6 +175,39 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTerminalLinkProvider(new ClaudeTerminalLinkProvider())
   );
 
+  async function openClaudeHere(
+    uri: vscode.Uri,
+    _uris: readonly vscode.Uri[] | undefined,
+    isFolder: boolean
+  ): Promise<void> {
+    let stat: vscode.FileStat;
+    try {
+      stat = await vscode.workspace.fs.stat(uri);
+    } catch {
+      void vscode.window.showErrorMessage(
+        `Unable to open Claude here because the selected resource is unavailable: ${uri.fsPath}`
+      );
+      return;
+    }
+
+    const expectedType = isFolder ? vscode.FileType.Directory : vscode.FileType.File;
+    if (stat.type !== expectedType) {
+      void vscode.window.showErrorMessage(
+        `Unable to open Claude here because the selected resource is no longer a ${isFolder ? "folder" : "file"}: ${uri.fsPath}`
+      );
+      return;
+    }
+
+    const folderPath = isFolder ? uri.fsPath : path.dirname(uri.fsPath);
+    const result = await sessionManager.launchSession(folderPath);
+    if (result.ok) {
+      existenceCache.markPresent(folderPath);
+    } else if (result.reason === "missing") {
+      existenceCache.markMissing(folderPath);
+      void vscode.window.showErrorMessage(result.message);
+    }
+  }
+
   // Commands
   context.subscriptions.push(
     vscode.commands.registerCommand("claudeConductor.openSession", async (arg?: unknown) => {
@@ -190,6 +224,16 @@ export function activate(context: vscode.ExtensionContext): void {
         await showQuickPick(sessionManager, existenceCache);
       }
     }),
+
+    vscode.commands.registerCommand(
+      "claudeConductor.openHere",
+      (uri: vscode.Uri, uris?: readonly vscode.Uri[]) => openClaudeHere(uri, uris, true)
+    ),
+
+    vscode.commands.registerCommand(
+      "claudeConductor.openHereFromFile",
+      (uri: vscode.Uri, uris?: readonly vscode.Uri[]) => openClaudeHere(uri, uris, false)
+    ),
 
     vscode.commands.registerCommand("claudeConductor.addFolder", () =>
       addFolderPrompt()

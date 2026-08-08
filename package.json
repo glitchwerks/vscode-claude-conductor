@@ -43,6 +43,14 @@
         "icon": "$(play)"
       },
       {
+        "command": "claudeConductor.openHere",
+        "title": "Open Claude Here"
+      },
+      {
+        "command": "claudeConductor.openHereFromFile",
+        "title": "Open Claude Here"
+      },
+      {
         "command": "claudeConductor.addFolder",
         "title": "Claude Conductor: Add Folder",
         "icon": "$(add)"
@@ -203,6 +211,28 @@
           "command": "claudeConductor.removeFavorite",
           "when": "view =~ /claudeConductor\\.(activeSessions|recentProjects|favorites)/ && viewItem == projectRoot.favorited",
           "group": "favorites@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "claudeConductor.openHere",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        },
+        {
+          "command": "claudeConductor.openHereFromFile",
+          "when": "!explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "claudeConductor.openHere",
+          "when": "false"
+        },
+        {
+          "command": "claudeConductor.openHereFromFile",
+          "when": "false"
         }
       ]
     },
