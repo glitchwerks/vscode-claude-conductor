@@ -460,6 +460,10 @@ describe("package.json contributions — Open Claude Here (issue #107)", () => {
       entry?.when,
       "claudeConductor.openHere's explorer/context entry must gate on \"explorerResourceIsFolder\" (FR-2, OQ-2)"
     ).toBe("explorerResourceIsFolder");
+    expect(
+      entry?.group,
+      "claudeConductor.openHere's explorer/context entry must render below \"Open in Integrated Terminal\" (order 30) in VS Code's built-in navigation group — see issue #116"
+    ).toBe("navigation@32");
   });
 
   it("wires claudeConductor.openHereFromFile into explorer/context gated by !explorerResourceIsFolder", () => {
@@ -473,6 +477,10 @@ describe("package.json contributions — Open Claude Here (issue #107)", () => {
       entry?.when,
       "claudeConductor.openHereFromFile's explorer/context entry must gate on \"!explorerResourceIsFolder\" (FR-2, OQ-2)"
     ).toBe("!explorerResourceIsFolder");
+    expect(
+      entry?.group,
+      "claudeConductor.openHereFromFile's explorer/context entry must render below \"Open in Integrated Terminal\" (order 30) in VS Code's built-in navigation group — see issue #116"
+    ).toBe("navigation@32");
   });
 
   it("suppresses both openHere* commands from the Command Palette via a commandPalette when:false clause (FR-9)", () => {
