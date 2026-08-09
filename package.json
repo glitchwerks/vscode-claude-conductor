@@ -217,12 +217,12 @@
         {
           "command": "claudeConductor.openHere",
           "when": "explorerResourceIsFolder",
-          "group": "navigation"
+          "group": "navigation@32"
         },
         {
           "command": "claudeConductor.openHereFromFile",
           "when": "!explorerResourceIsFolder",
-          "group": "navigation"
+          "group": "navigation@32"
         }
       ],
       "commandPalette": [
