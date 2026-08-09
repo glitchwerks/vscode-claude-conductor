@@ -43,14 +43,6 @@
         "icon": "$(play)"
       },
       {
-        "command": "claudeConductor.openHere",
-        "title": "Open Claude Here"
-      },
-      {
-        "command": "claudeConductor.openHereFromFile",
-        "title": "Open Claude Here"
-      },
-      {
         "command": "claudeConductor.addFolder",
         "title": "Claude Conductor: Add Folder",
         "icon": "$(add)"
@@ -106,6 +98,14 @@
         "command": "claudeConductor.locateFavorite",
         "title": "Locate Folder...",
         "category": "Claude Conductor"
+      },
+      {
+        "command": "claudeConductor.openHere",
+        "title": "Open Claude Here"
+      },
+      {
+        "command": "claudeConductor.openHereFromFile",
+        "title": "Open Claude Here"
       }
     ],
     "viewsContainers": {
