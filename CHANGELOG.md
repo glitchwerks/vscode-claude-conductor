@@ -4,6 +4,17 @@ All notable changes to the Claude Conductor extension are documented here.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-08-09
+
+### Added
+
+- **"Open Claude Here" Explorer context-menu command pair** — two new commands, `claudeConductor.openHere` (right-click a folder) and `claudeConductor.openHereFromFile` (right-click a file), launch or focus a Claude session rooted at the clicked item without going through the sidebar quick-pick. Both delegate to the same `launchSession()` call `claudeConductor.openSession` already uses, so `reuseExistingTerminal` and the missing-folder guard apply automatically; both commands are hidden from the Command Palette since they only make sense with an Explorer target. Fixes #107 (PR #109).
+
+### Fixed
+
+- **Hooks no longer silently fail to start on nvm-only Node installs** — `getHookScriptPath()` hardcoded a Program Files path (`/c/PROGRA~1/nodejs/node.exe`) for every Windows hook command, which broke every installed hook on machines where Node is only available through a version manager (nvm4w, nvm-windows, volta) with no Program Files install. Node is now resolved via `where`/`which node` first, falling back to a short list of common install paths, with the old hardcoded path kept only as a last resort that never throws. A follow-up commit in the same PR quote-guards the hook-script path segment the same way the node-binary segment already was, so an extension path containing a space (spaced Windows username) no longer splits into multiple shell arguments and fails the hook. Fixes #104 (PR #106).
+- **Duplicate "Claude Conductor" output channel** — two independent `createOutputChannel("Claude Conductor")` call sites (`src/output.ts` and `src/stateWatcher.ts`) produced two entries in the VS Code Output panel dropdown, and disposing `StateWatcher` tore down the shared channel out from under any other consumer. `src/output.ts` is now the sole owner of the channel; `StateWatcher` delegates to its exported `log()` function instead of creating or disposing its own copy. Fixes #111 (PR #112).
+
 ## [1.3.1] — 2026-08-04
 
 ### Added
