@@ -4,6 +4,12 @@ All notable changes to the Claude Conductor extension are documented here.
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-08-09
+
+### Fixed
+
+- **"Open Claude Here" Explorer context-menu entries no longer render above "New File"** — `contributes.menus["explorer/context"]` set `"group": "navigation"` with no explicit order, and VS Code sorts unordered entries first within a group. Set to `navigation@32`, placing the entries below "Open in Integrated Terminal", based on VS Code's own core `MenuId.ExplorerContext` registrations (New File=4, New Folder=6, Open to the Side=10, Open With.../Reveal in File Explorer=20, Open in Integrated Terminal=30, Open in External Terminal=31). Fixes #116 (PR #117).
+
 ## [1.4.0] — 2026-08-09
 
 ### Added
