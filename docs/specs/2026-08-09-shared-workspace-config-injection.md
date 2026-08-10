@@ -25,7 +25,7 @@ skills_relevant:
 **Status:** ACCEPTED — §5.1 and §5.2 were answered on 2026-08-09, both matching this document's recommendations (refuse a global-scope-only value; accept R1's access-grant price). Revised the same day to close a `project-reviewer` pass (one BLOCKING, seven CONCERN, two NIT findings); see §5.8 for what changed. §5.6's pre-implementation confirmations remain unrun and are the implementer's first task.
 
 **Prior inputs consumed (not re-derived):**
-- Scoping decision: `docs/plans/2026-07-29-shared-workspace-config-injection.md` (UNDER REVIEW; its §2 verified facts are the foundation for §1 below and are re-verified against current source here, because the file moved between 2026-07-29 and today)
+- Scoping decision: `docs/plans/2026-07-29-shared-workspace-config-injection.md` (SUPERSEDED; its §2 verified facts are the foundation for §1 below and are re-verified against current source here, because the file moved between 2026-07-29 and today)
 - Prior-art research: `docs/research/2026-07-29-shared-workspace-config-injection.md`
 - Foundational spec: `docs/specs/2026-07-29-foundational-project-spec.md` §2.7.2
 
@@ -62,7 +62,7 @@ Rationale, in order of weight:
 1. **It is the only route that loads content at the real `CLAUDE.md` tier.** The permissions doc's table of what `--add-dir` directories contribute lists *"[CLAUDE.md] files, `.claude/rules/`, and `CLAUDE.local.md` — Only when `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` is set"* (`https://code.claude.com/docs/en/permissions` § Additional directories grant file access, not configuration, fetched 2026-08-09). `--append-system-prompt-file` loads at system-prompt scope instead, which is a different tier from `CLAUDE.md` — the latter is *"delivered as a user message after the system prompt, not as part of the system prompt itself"* (`https://code.claude.com/docs/en/memory` § Troubleshoot memory issues, fetched 2026-08-09).
 2. **It is the only route with a first-party, non-model-mediated load receipt.** `/context` § Memory files and the `InstructionsLoaded` hook report loading directly (§1.1, P3). The other routes can only be checked by asking the model to echo a nonce, which is model-mediated and therefore weaker evidence.
 3. **It touches no global state.** Unlike a globally-installed `SessionStart` hook, it never writes `~/.claude/settings.json`, so it cannot disturb Conductor's existing three hooks and does not force the `HOOK_MARKER` generalization (`src/hookInstaller.ts:L9`, single hardcoded marker consumed at `:L111`, `:L137`, `:L175`, `:L236`) that a second hook script would require.
-4. **Its documented per-session approval risk did not materialise** (§1.1, P2).
+4. **Its documented per-session approval risk is inferred absent from documentation, not yet empirically confirmed** (§1.1, P2; pending §5.6).
 
 Its price was put to the user rather than assumed away, and was **accepted on 2026-08-09** — see §5.2.
 
