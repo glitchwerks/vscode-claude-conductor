@@ -17,7 +17,7 @@ skills_relevant:
 
 **Tracking issue:** [#81 "Spike: shared workspace-level config (CLAUDE.md-equivalent) injected into every session"](https://github.com/cbeaulieu-gt/vscode-claude-conductor/issues/81) — verified open, body fetched 2026-07-29. Issue #81 states its own boundary: *"Out of Scope: Implementation (scoping/planning only)."*
 **Type:** scoping-decision
-**Status:** UNDER REVIEW — not an implementation plan. Seven decision points (D1–D7) require user/expert answers, and a three-probe empirical gate (Phase 0) must return before any mechanism can be recommended as final. No code should be written from this document until Phase 0 returns, D1–D5 and D7 are answered — D7 is required for every route per NFR5 — and, only if D3 selects a hook route (R3/R4), D6 is answered too; if D3 selects R1/R2, D6 is moot and may remain unresolved.
+**Status:** SUPERSEDED BY `docs/specs/2026-08-09-shared-workspace-config-injection.md` (ACCEPTED 2026-08-09) — that spec resolves D1–D7, dissolves the Phase 0 gate, selects route R1, and is the only document to implement from. This plan is retained, not deleted: its §2 verified facts are cited by line number from `docs/specs/2026-07-29-foundational-project-spec.md`, and its §12 records the `unverified:` provenance behind the spec's §2.5 path-resolution table. Its own `src/` citations are stale (see the spec's Verification note) — do not reuse them.
 
 **Prior inputs consumed (not re-derived):**
 - Prior-art research: `docs/research/2026-07-29-shared-workspace-config-injection.md`

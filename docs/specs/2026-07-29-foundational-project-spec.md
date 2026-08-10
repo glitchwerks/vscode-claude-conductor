@@ -219,7 +219,7 @@ Three externally-sourced leads bear directly on this cluster, each verified in t
 
 A single shared `CLAUDE.md`-equivalent reaching every Conductor-launched session in a workspace, layered on top of each folder's own `CLAUDE.md` (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L30`).
 
-Currently a **decision document, not an implementation plan**, with seven decision points D1–D7 and a three-probe empirical Phase 0 gate (P1/P2/P3) that must return before any mechanism is recommended as final (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L20`, `L88-L112`, `L144-L221`). #81's own body scopes implementation out (`:L18`).
+**Specified and ACCEPTED on 2026-08-09** in `docs/specs/2026-08-09-shared-workspace-config-injection.md`, which is now the governing document: it selects route R1 (`CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` via `createTerminal({ env })` plus an appended `--add-dir "<dir>"`), adds one window-scoped setting `claudeConductor.sharedConfigDir`, and writes nothing to `~/.claude/`. The earlier scoping plan was *historically* a decision document rather than an implementation plan, carrying seven decision points D1–D7 and a three-probe Phase 0 gate P1/P2/P3 (`docs/plans/2026-07-29-shared-workspace-config-injection.md:L88-L112`, `L144-L221`); the spec resolves or dissolves all of them and supersedes it. #81's own body scopes implementation out (`:L18`), so the implementation needs its own issue.
 
 Two findings from that document constrain future work regardless of route:
 

@@ -28,6 +28,7 @@ Directory: `specs/`
 | [`2026-04-28-75-favorites-design.md`](specs/2026-04-28-75-favorites-design.md) | feature-spec | ACCEPTED | #75 |
 | [`2026-08-04-workspace-folder-launcher-design.md`](specs/2026-08-04-workspace-folder-launcher-design.md) | feature-spec | ACCEPTED | #103 |
 | [`2026-08-07-explorer-open-claude-here.md`](specs/2026-08-07-explorer-open-claude-here.md) | feature-spec | ACCEPTED | #107 |
+| [`2026-08-09-shared-workspace-config-injection.md`](specs/2026-08-09-shared-workspace-config-injection.md) | feature-spec | ACCEPTED — §5.1 and §5.2 answered; four pre-implementation confirmations in §5.6 remain unrun | #81 |
 
 The foundational spec is the durable anchor: problem statement, audience,
 feature inventory, and roadmap. Per-feature specs reference it rather than
@@ -47,7 +48,23 @@ Directory: `plans/`
 
 | Document | Type | Status | Issue |
 |---|---|---|---|
-| [`2026-07-29-shared-workspace-config-injection.md`](plans/2026-07-29-shared-workspace-config-injection.md) | scoping-decision | UNDER REVIEW — 7 decision points and a 3-probe empirical gate unanswered; **no code should be written from it yet** | #81 |
+| [`2026-07-29-shared-workspace-config-injection.md`](plans/2026-07-29-shared-workspace-config-injection.md) | scoping-decision | SUPERSEDED by [`specs/2026-08-09-shared-workspace-config-injection.md`](specs/2026-08-09-shared-workspace-config-injection.md) — **do not implement from it** | #81 |
+
+The shared-workspace-config plan was flipped from UNDER REVIEW to SUPERSEDED on
+2026-08-09, when
+[`specs/2026-08-09-shared-workspace-config-injection.md`](specs/2026-08-09-shared-workspace-config-injection.md)
+was accepted — the spec resolves the plan's seven decision points, dissolves its
+three-probe Phase 0 gate, and selects route R1. The flip sequence, including the
+same-line-substitution constraint it had to respect, is recorded in the spec's
+§5.7.
+
+The plan is **retained rather than deleted**, an intentional exception to the
+plan-lifecycle convention: its §2 verified facts are cited by line number from
+the foundational spec, and its §12 records the `unverified:` provenance behind
+the spec's §2.5 path-resolution table (the table itself is reproduced in the
+spec, so the spec stays checkable independently). Its `src/` citations are
+stale — the spec re-read every one of them — so treat the plan as historical
+evidence, not as a source of file:line facts.
 
 The SDD formalization plan (`docs/plans/2026-07-30-formalize-spec-driven-development.md`,
 #84) has been deleted per the plan-lifecycle convention — #84 is closed and merged
