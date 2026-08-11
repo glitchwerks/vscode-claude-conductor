@@ -1,0 +1,2 @@
+- [Codex companion invocation](codex_companion_invocation.md) — use `--cwd`/`--prompt-file` on codex-companion.mjs, `npm --prefix` for npm/tsc, to avoid chained-cd
+- [Codex companion background polling](codex_companion_background_polling.md) — foreground `task --write` can auto-move to background at 120s even for small fixes; poll `status --all --json --cwd <dir>` then `result --json --cwd <dir>`
