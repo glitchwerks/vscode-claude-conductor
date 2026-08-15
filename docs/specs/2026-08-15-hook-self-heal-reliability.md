@@ -19,7 +19,7 @@ skills_relevant:
 
 **Type:** feature-spec
 
-**Status:** DRAFT
+**Status:** ACCEPTED
 
 ## 1. Problem
 
@@ -104,9 +104,15 @@ the diff is three lines."
 catch, log the error (message and the resolved hook script path) via the
 existing output channel (`src/output.ts:L17-L20`, `log()`) and call
 `vscode.window.showErrorMessage` with an actionable message pointing at
-that output channel — no more silent unhandled rejection. This does not
-change the return value or control flow of `ensureHooksInstalled` itself,
-only how its caller handles success and failure.
+that output channel — no more silent unhandled rejection. Per Resolution 1
+(§5), this popup is deduplicated per distinct signature (the resolved hook
+script path, or the error message text) using an in-memory Set tracked in
+module state: skip showing `showErrorMessage` again for a signature already
+recorded in the same running VS Code session, so FR-3's window-focus retry
+cannot spam the same popup when the underlying failure is persistent rather
+than transient. This does not change the return value or control flow of
+`ensureHooksInstalled` itself, only how its caller handles success and
+failure.
 
 **FR-2 — path-existence check on the *recorded* path, as an independent
 self-heal trigger.** `ensureHooksInstalled`'s reconciliation branch
@@ -157,7 +163,11 @@ cause (§ "Suggested directions": "the fix is procedural (surface a
 code-only"). In that case, do not write: log via `log()`
 (`src/output.ts:L17-L20`) and surface a `vscode.window.showInformationMessage`
 telling the user to reload the window, rather than writing a target path
-that is equally broken. **This guard is load-bearing, not optional:**
+that is equally broken. Per Resolution 1 (§5), this reload prompt is
+deduplicated the same way as FR-1's error popup — per distinct signature,
+once per running VS Code session — so it does not re-fire on every
+FR-3-triggered focus event while the extension host remains stale.
+**This guard is load-bearing, not optional:**
 without it, a genuinely stale recorded path (correctly caught by FR-2) on
 a host whose own `context.extensionPath` is *also* stale would still be
 "fixed" by writing `getHookScriptPath()`'s equally-broken result — and
@@ -216,6 +226,37 @@ within the same process. This guards only against re-entrancy *within one
 VS Code window's extension host* — see Risk 3 for the cross-window case
 this does not solve.
 
+**FR-6 — lockfile guard around the settings.json read-modify-write critical
+section.** Resolved by Resolution 2 (§5). Add a minimal, narrowly-scoped
+lockfile guard around the same read → reconcile → write sequence FR-1 and
+FR-2a already wrap: `readSettings()` (`src/hookInstaller.ts:L85-L92`) →
+`reconcileHookPaths()` (`src/hookInstaller.ts:L158-L185`) →
+`writeSettings()` (`src/hookInstaller.ts:L97-L99`), as invoked from
+`ensureHooksInstalled`'s reconciliation branch
+(`src/hookInstaller.ts:L276-L288`). This is deliberately narrow — not a
+general-purpose interprocess-locking abstraction; see §3 Out of scope.
+
+- Before starting the RMW sequence, exclusive-create a lockfile alongside
+  `SETTINGS_PATH` (`src/hookInstaller.ts:L7`, e.g.
+  `~/.claude/settings.json.lock`) containing the current process's PID and a
+  timestamp. Remove it once the sequence completes.
+- **Stale-lock detection.** If an existing lockfile's timestamp is older
+  than a short threshold — on the order of a few seconds, generous relative
+  to a read-parse-write of a small JSON file, though this document has not
+  measured the actual duration — treat it as abandoned by a crashed process
+  and steal it, so a crash can never permanently deadlock self-heal.
+- **Contention is not failure.** If the lock cannot be acquired and the
+  existing lock is not yet stale, fail fast: do not block, do not retry
+  within this cycle, and do not surface a user-facing error. This is
+  expected multi-window contention, not a defect — surfacing it here would
+  cut against Resolution 1's per-session dedup intent. Log via `log()`
+  (`src/output.ts:L17-L20`) at low/debug severity only, skip the write for
+  this cycle, and rely on FR-3's window-focus retry to attempt again later.
+- This closes Risk 3's residual cross-window race for the crash-free case
+  without introducing a general locking abstraction: a lock held by a live
+  process yields immediately to FR-3's retry, and a lock held by a crashed
+  process is bounded by the stale-lock timeout rather than indefinite.
+
 ## 3. Scope boundaries
 
 **In scope:**
@@ -226,7 +267,10 @@ this does not solve.
 - `src/hookInstaller.ts`: the recorded-hook-command-path extraction and
   `fs.existsSync` check (FR-2), the freshly-derived-target `fs.existsSync`
   stale-host write guard (FR-2a), the branch merge with the existing
-  `hooksUpToDate()` check, and the in-flight guard (FR-5).
+  `hooksUpToDate()` check, the in-flight guard (FR-5), and the lockfile
+  guard — acquire, release, and stale-steal logic, including the
+  `~/.claude/settings.json.lock` file itself — around the settings.json
+  read-modify-write sequence (FR-6).
 - Tests for: the awaited/caught failure path surfacing an error (FR-1), the
   recorded-path extraction correctly isolating the script segment across
   quoted/unquoted, Windows git-bash-converted, and POSIX command forms and
@@ -235,7 +279,12 @@ this does not solve.
   instead of looping when the freshly-derived target is also missing
   (FR-2a), the window-focus listener re-invoking the check and being
   registered as a disposable (FR-3), the consent-flow no-regression
-  guarantee (FR-4), and the in-flight guard preventing a double-run (FR-5).
+  guarantee (FR-4), the in-flight guard preventing a double-run (FR-5), and
+  for FR-6: lock acquired and released around a successful RMW cycle, a
+  held (non-stale) lock causing the write to be skipped without a
+  user-facing error, a stale lock being detected and stolen so the RMW
+  proceeds, and a failed-to-acquire cycle leaving `settings.json` untouched
+  and falling through to FR-3's retry.
 - `README.md` § How Idle Detection Works (verified present at
   `README.md:L108`, covering `README.md:L110-L122` — the hook table, state
   files, the self-heal paragraph, and removal instructions) — update to
@@ -248,12 +297,17 @@ this does not solve.
 
 **Out of scope** (per `#128`, open, fetched 2026-08-15, and this document's
 own risk analysis):
-- A real cross-process lock or mutex for concurrent writes to
-  `~/.claude/settings.json` from multiple VS Code windows. FR-3's retry
-  loop makes a transient loss *eventually* self-correcting within a running
-  window, but does not add interprocess coordination — see Risk 3.
-- Rate-limiting or backoff scheduling for repeated failure notifications
-  beyond FR-3's "retry on next focus event" — see Open Question 1.
+- A **general-purpose** cross-process locking or IPC abstraction for
+  `~/.claude/settings.json`, reusable across other writers or other files.
+  FR-6 (§2) adds a narrowly-scoped lockfile guard around this one
+  read-modify-write sequence — resolved in this session's design review,
+  Resolution 2 (§5) — but that guard is not a reusable locking subsystem;
+  see Risk 3.
+- Backoff scheduling or elaborate notification throttling beyond FR-1's and
+  FR-2a's per-session, per-signature dedup (Resolution 1, §5) — e.g.
+  escalating delays or persisting notified signatures across sessions. The
+  in-session dedup itself is in scope; anything beyond a simple in-memory
+  Set is not.
 - Any change to `hooks/session-state.js` itself, or to the
   `Notification`/`UserPromptSubmit`/`Stop` hook wiring it implements
   (`README.md:L112-L116`).
@@ -287,16 +341,26 @@ can fully prevent; a write from window A can still be clobbered by a write
 from window B in the narrow interval between A's read and A's write.
 FR-1–FR-3 make a lost write *visible* (FR-1) and *eventually
 self-correcting* (FR-3, since the next focus event re-checks from scratch)
-rather than *impossible*. Whether that residual risk needs real
-interprocess locking is Open Question 2 — flagged, not resolved, by this
-spec.
+rather than *impossible*. **Mitigation:** resolved via FR-6 (§2) and
+Resolution 2 (§5) — a narrowly-scoped lockfile guard around the settings.json
+read-modify-write sequence closes this race for the crash-free contention
+case: a lock held by a live window yields immediately (no blocking, no
+user-facing error) and relies on FR-3's retry, while a lock held by a
+crashed process is bounded by the stale-lock timeout rather than
+indefinite. This is deliberately not general interprocess locking (§3 Out
+of scope), so contention on some other write path to the same file, outside
+this one RMW sequence, remains uncovered.
 
 **Risk 4 — repeated failure notifications could be noisy.** If the
 underlying cause is persistent rather than transient (e.g. a real
 permissions problem on `~/.claude/settings.json`, not a momentary lock),
 FR-1's `showErrorMessage` could fire on every focus event FR-3 triggers,
-which is intrusive rather than helpful. **Mitigation:** deferred to Open
-Question 1 — not resolved by this spec.
+which is intrusive rather than helpful. **Mitigation:** resolved via
+Resolution 1 (§5) — FR-1's `showErrorMessage` and FR-2a's reload-prompt
+`showInformationMessage` are each deduplicated per distinct signature (the
+resolved hook script path, or the error message text) within a running VS
+Code session, so a persistent failure produces at most one popup per
+signature per session rather than one on every focus-triggered retry.
 
 **Risk 5 — FR-2 combined with FR-3, without FR-2a's guard, is an unbounded
 write loop.** Caught while drafting this document (see the Verification
@@ -330,19 +394,56 @@ incidental plumbing.
 
 ## 5. Open questions
 
-1. Should FR-1's `showErrorMessage` be rate-limited (e.g. once per VS Code
-   session, or once per distinct error message/path) so a persistent
-   failure doesn't produce a popup on every window-focus retry (FR-3, Risk
-   4)? Should FR-2a's reload prompt be similarly rate-limited? ⚠️
-   **Confirmation needed.**
-2. Should real interprocess coordination (a lock file, or a
-   compare-and-swap write pattern) for `~/.claude/settings.json` be scoped
-   as a follow-up issue, given FR-1–FR-3 only make the residual
-   cross-window race (Risk 3) visible and eventually self-correcting, not
-   eliminated? ⚠️ **Confirmation needed.**
-3. FR-5's in-flight guard is described as "a module-level boolean or a held
-   Promise" — implementation detail, not blocking, left to the
-   implementation step.
+Both open questions below were raised in the original draft of this
+document and resolved in this session's design review (2026-08-15), before
+implementation started. They are kept here, with their original text, as a
+resolution record rather than deleted — the reasoning behind each answer is
+load-bearing for FR-1, FR-2a, and FR-6 above and for Risk 3 / Risk 4's
+mitigations. No open questions remain in this document.
+
+### Resolution 1 (was Open Question 1 — notification rate-limiting)
+
+Original question: "Should FR-1's `showErrorMessage` be rate-limited (e.g.
+once per VS Code session, or once per distinct error message/path) so a
+persistent failure doesn't produce a popup on every window-focus retry
+(FR-3, Risk 4)? Should FR-2a's reload prompt be similarly rate-limited?"
+
+**Resolved: yes, rate-limit.** FR-1's `showErrorMessage` and FR-2a's
+reload-prompt `showInformationMessage` must each be deduplicated per
+distinct error/path signature per running VS Code session. Track a `Set` of
+already-notified signatures (e.g. the resolved hook script path, or the
+error message text) in module state; skip showing the popup again for a
+signature already in the set within the same running session. The set
+resets naturally on window/extension-host restart — no persistence across
+sessions is required or in scope. This prevents FR-3's window-focus retry
+from spamming a popup on every focus edge when the underlying failure is
+persistent rather than transient (Risk 4).
+
+### Resolution 2 (was Open Question 2 — interprocess locking)
+
+Original question: "Should real interprocess coordination (a lock file, or
+a compare-and-swap write pattern) for `~/.claude/settings.json` be scoped
+as a follow-up issue, given FR-1–FR-3 only make the residual cross-window
+race (Risk 3) visible and eventually self-correcting, not eliminated?"
+
+**Resolved: yes, but narrowly — not as a follow-up issue.** FR-6 (§2) adds
+a minimal lockfile guard around the settings.json read-modify-write
+critical section (the same `readSettings()` → `reconcileHookPaths()` →
+`writeSettings()` sequence FR-1 through FR-2a already wrap), scoped to this
+one RMW rather than a general IPC subsystem: an exclusive-create lockfile
+containing PID and timestamp guards the sequence; a lock older than a short
+threshold is treated as abandoned and stolen, so a crash can never
+permanently deadlock self-heal; and a lock that is held but not yet stale
+causes the current cycle to fail fast — no blocking, no user-facing error,
+just a debug-level log line and reliance on FR-3's retry. This closes
+Risk 3's residual cross-window race for the common crash-free-contention
+case without introducing a general-purpose locking abstraction for other
+writers or other files (§3 Out of scope) — a lock held by a crashed process
+is bounded by the stale-lock timeout, not indefinite.
+
+FR-5's in-flight guard is still described only as "a module-level boolean
+or a held Promise" — implementation detail, not blocking, left to the
+implementation step.
 
 ## Verification note
 
@@ -387,3 +488,16 @@ uses. This is recorded as a defect in the *requirement text as originally
 drafted*, not in shipped code, since no code has been written against this
 spec yet. No repo tooling was unavailable; `gh`, `git`, `Read`, `Grep`,
 `Bash` (`curl`), and `WebFetch` were sufficient for every claim above.
+
+Resolutions 1 and 2 (§5), and the resulting FR-6 and Risk 3/Risk 4 edits,
+were made in this session's design discussion on 2026-08-15 — not sourced
+from `#128`'s issue thread, which as of that date still has zero comments
+(see above). They are recorded here as router/user decisions reached during
+review, the same provenance this document already uses for Risk 5's
+draft-time catch and the FR-2/FR-2a split (commits `8ea3d5c` and
+`fa050a5`, this branch's own history, cited above). `src/hookInstaller.ts`
+and `src/extension.ts` were re-read in full at the time of this revision to
+confirm every line citation used in FR-6 and the amended FR-1/FR-2a text
+still points at the same code — no lines shifted since the commit noted
+above, because no implementation code has been written against this spec
+yet.
