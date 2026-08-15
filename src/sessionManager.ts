@@ -108,17 +108,6 @@ export class SessionManager implements vscode.Disposable {
       }
     }
 
-    // PHASE0-PROBE P3 — temporary diagnostic-only branch, gated by an env var
-    // so default launchSession behaviour is completely unchanged when unset.
-    // Answers issue #110's P3 (docs/plans/2026-08-08-session-pane-grouping.md
-    // § 3): does an editor-born terminal (created via
-    // location:{viewColumn}, no show()) actually start its process and
-    // activate shell integration? Remove this branch and _phase0ProbeP3()
-    // once P3 is answered.
-    if (process.env.CLAUDE_CONDUCTOR_PHASE0_P3) {
-      return this._phase0ProbeP3(normalized);
-    }
-
     if (getReuseTerminal()) {
       const existing = this._findSessionByFolder(normalized);
       if (existing) {
@@ -141,82 +130,8 @@ export class SessionManager implements vscode.Disposable {
     // Move terminal from panel to editor tab area
     await vscode.commands.executeCommand("workbench.action.terminal.moveToEditor");
 
-    // PHASE0-PROBE P4 / P2 — temporary diagnostic-only block. Logs tab-group
-    // topology (P4: does moveToEditor split into a new group, or land in the
-    // active group?) and cross-checks the moved tab's label against the
-    // terminal's name (P2: is Tab.label usable as Conductor's discriminator?).
-    // See docs/plans/2026-08-08-session-pane-grouping.md § 3. Wrapped in
-    // try/catch so this throwaway diagnostic can never affect the real launch
-    // path or the mocked-vscode unit test harness (test/mocks/vscode.ts has no
-    // tabGroups stub — see § 2.9 of the plan). Remove this whole block once
-    // P2/P4 are answered.
-    try {
-      const groups = vscode.window.tabGroups.all;
-      debugLog(`[PHASE0-PROBE P4] tabGroups.all.length=${groups.length}`);
-      groups.forEach((group, i) => {
-        const labels = group.tabs.map((t) => JSON.stringify(t.label));
-        debugLog(
-          `[PHASE0-PROBE P4] group[${i}] viewColumn=${group.viewColumn} tabs=${JSON.stringify(labels)}`
-        );
-      });
-
-      const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
-      debugLog(
-        `[PHASE0-PROBE P2] activeTab.label=${JSON.stringify(activeTab?.label)} terminal.name=${JSON.stringify(terminal.name)} equal=${activeTab?.label === terminal.name}`
-      );
-    } catch (err) {
-      debugLog(
-        `[PHASE0-PROBE P4/P2] tabGroups inspection failed: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-
     // Dispatch the claude command only after the shell prompt is ready
     await this._dispatchClaudeCommand(terminal);
-
-    return { ok: true, reused: false };
-  }
-
-  /**
-   * PHASE0-PROBE P3 — temporary diagnostic. Creates a terminal directly in
-   * the editor area via `location: {viewColumn: Beside}` and WITHOUT calling
-   * show() first, then logs `processId` resolution and `shellIntegration`
-   * availability at three checkpoints (immediately, after a delay with no
-   * show(), and after an explicit show()) so a single manual run answers all
-   * three parts of P3 (docs/plans/2026-08-08-session-pane-grouping.md § 3).
-   * Only reachable when CLAUDE_CONDUCTOR_PHASE0_P3 is set — never runs during
-   * normal use. Remove once P3 is answered.
-   */
-  private async _phase0ProbeP3(normalized: string): Promise<LaunchResult> {
-    const folderName = path.basename(normalized);
-    const terminal = vscode.window.createTerminal({
-      name: `${SESSION_NAME_PREFIX}${folderName}`,
-      cwd: normalized,
-      iconPath: new vscode.ThemeIcon("sparkle"),
-      color: new vscode.ThemeColor("terminal.ansiGreen"),
-      location: { viewColumn: vscode.ViewColumn.Beside },
-    });
-
-    debugLog(
-      `[PHASE0-PROBE P3] created editor-born terminal name=${JSON.stringify(terminal.name)} — no show() called`
-    );
-
-    const logState = async (checkpoint: string) => {
-      const pid = await terminal.processId;
-      debugLog(
-        `[PHASE0-PROBE P3] checkpoint=${checkpoint} processId=${pid === undefined ? "undefined" : pid} shellIntegration=${terminal.shellIntegration ? "available" : "unavailable"}`
-      );
-    };
-
-    await logState("immediately-after-create");
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
-    await logState("after-2000ms-delay-no-show-call");
-
-    terminal.show(true);
-    debugLog(`[PHASE0-PROBE P3] explicit show(true) called`);
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 500));
-    await logState("after-explicit-show");
 
     return { ok: true, reused: false };
   }
@@ -408,12 +323,6 @@ export class SessionManager implements vscode.Disposable {
     // Tier 1 — identity
     if (this._removeByKey(terminal)) {
       debugLog(`[close:tier1] hit name=${JSON.stringify(terminal.name)}`);
-      // PHASE0-PROBE P1 — which tier matched this close event. Compare a run
-      // against an editor-born terminal (created via
-      // location:{viewColumn}) with today's panel-then-moveToEditor path.
-      // See docs/plans/2026-08-08-session-pane-grouping.md § 3. Remove once
-      // P1 is answered.
-      debugLog(`[PHASE0-PROBE P1] tier=1(identity) name=${JSON.stringify(terminal.name)}`);
       return;
     }
     debugLog(`[close:tier1] miss name=${JSON.stringify(terminal.name)}`);
@@ -427,8 +336,6 @@ export class SessionManager implements vscode.Disposable {
       if (nameMatches.length === 1) {
         const [[key, session]] = nameMatches;
         debugLog(`[close:tier2] hit name=${JSON.stringify(terminal.name)} matchedSession=${JSON.stringify(session.folderPath)}`);
-        // PHASE0-PROBE P1 — see marker above.
-        debugLog(`[PHASE0-PROBE P1] tier=2(name) name=${JSON.stringify(terminal.name)}`);
         this._removeByKey(key);
         return;
       }
@@ -447,8 +354,6 @@ export class SessionManager implements vscode.Disposable {
         if (folderMatches.length === 1) {
           const [[key, session]] = folderMatches;
           debugLog(`[close:tier2:disambiguated] hit name=${JSON.stringify(terminal.name)} closedFolderPath=${JSON.stringify(closedFolderPath)} matchedSession=${JSON.stringify(session.folderPath)}`);
-          // PHASE0-PROBE P1 — see marker above.
-          debugLog(`[PHASE0-PROBE P1] tier=2(name-disambiguated) name=${JSON.stringify(terminal.name)}`);
           this._removeByKey(key);
           return;
         }
@@ -468,26 +373,17 @@ export class SessionManager implements vscode.Disposable {
       (pid) => {
         if (pid === undefined) {
           debugLog(`[close:tier3:no-pid] processId=undefined name=${JSON.stringify(terminal.name)} — deferring to reconcile()`);
-          // PHASE0-PROBE P1 — see marker above. No tier matched this event.
-          debugLog(`[PHASE0-PROBE P1] tier=none(no-pid) name=${JSON.stringify(terminal.name)}`);
           return;
         }
         const trackedTerminal = this._pidToTerminal.get(pid);
         const sessionStillExists = trackedTerminal ? this._sessions.has(trackedTerminal) : false;
         debugLog(`[close:tier3] pid=${pid} name=${JSON.stringify(terminal.name)} inPidIndex=${trackedTerminal !== undefined} sessionStillExists=${sessionStillExists}`);
         if (trackedTerminal && sessionStillExists) {
-          // PHASE0-PROBE P1 — see marker above.
-          debugLog(`[PHASE0-PROBE P1] tier=3(pid) name=${JSON.stringify(terminal.name)}`);
           this._removeByKey(trackedTerminal);
-        } else {
-          // PHASE0-PROBE P1 — see marker above. No tier matched this event.
-          debugLog(`[PHASE0-PROBE P1] tier=none(pid-lookup-failed) name=${JSON.stringify(terminal.name)}`);
         }
       },
       () => {
         debugLog(`[close:tier3:no-pid] processId rejected name=${JSON.stringify(terminal.name)} — deferring to reconcile()`);
-        // PHASE0-PROBE P1 — see marker above. No tier matched this event.
-        debugLog(`[PHASE0-PROBE P1] tier=none(pid-rejected) name=${JSON.stringify(terminal.name)}`);
       }
     );
   }
