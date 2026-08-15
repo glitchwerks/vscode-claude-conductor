@@ -178,7 +178,7 @@ That one rule subsumes three things that would otherwise be separate mechanisms:
 
 **If P2 fails** (labels unusable), tier b is dropped and the design degrades gracefully: the first session after a reload bootstraps a fresh group via D2, and subsequent sessions in that window group correctly off tier a. The feature still works; it just does not reattach to a pre-reload group.
 
-### D2 — What happens when no Conductor group exists yet (first session of the window)? ⚠️ **Confirmation needed**
+### D2 — What happens when no Conductor group exists yet (first session of the window)? ✅ **Confirmed 2026-08-15**
 
 **Options**
 
@@ -191,6 +191,8 @@ That one rule subsumes three things that would otherwise be separate mechanisms:
 **Recommendation — (b) `ViewColumn.Beside`.** Matches the research doc's verdict (`docs/research/2026-08-08-session-pane-grouping.md` § Verdict, `L146-L171`) and, per § 2.2, is an API-documented placement request — VS Code resolves the symbolic value to a concrete column at runtime, not a type-level guarantee — that avoids the empty-pane failure. Because that resolution happens at runtime, P4 and P5 (§ 3) remain required empirical validation before this recommendation can be treated as final, not a formality superseded by the type declarations (`Status`, above).
 
 **Known imperfection, accepted:** if tier a's cache is cold *and* tier b's re-derivation misses while a Conductor group really does exist, `Beside` produces a spurious extra group. That is a cosmetic degradation (an extra pane the user can drag-merge), never a stray *empty* pane and never a session dropped into the user's files. Compare option (c), whose failure mode is the empty pane. This asymmetry is the reason to prefer symbolic values even at the cost of an occasional redundant split.
+
+Confirmed via issue #110 (https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5300114215, 2026-08-15) — see that comment for the full rationale chain (why P4/P5's "empirical validation" note refers to D4's own gating probes P1/P3, not a separate untested claim about `Beside` itself).
 
 ### D3 — What happens when the tracked group disappears? ⚠️ **Confirmation needed**
 
