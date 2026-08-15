@@ -188,7 +188,7 @@ That one rule subsumes three things that would otherwise be separate mechanisms:
 | (b) **`ViewColumn.Beside`** | Symbolic, resolved by VS Code relative to the active group (`index.d.ts:L7351-L7355`), so it can never conjure an empty pane. Creates a fresh group beside the user's work, which is the requested UX. |
 | (c) A computed absolute column | Forbidden by § 2.2 / NFR3. This is the `anthropics/claude-code#83333` bug. |
 
-**Recommendation — (b) `ViewColumn.Beside`.** Matches the research doc's verdict (`docs/research/2026-08-08-session-pane-grouping.md` § Verdict, `L146-L171`) and, per § 2.2, has a type-level guarantee against the empty-pane failure.
+**Recommendation — (b) `ViewColumn.Beside`.** Matches the research doc's verdict (`docs/research/2026-08-08-session-pane-grouping.md` § Verdict, `L146-L171`) and, per § 2.2, is an API-documented placement request — VS Code resolves the symbolic value to a concrete column at runtime, not a type-level guarantee — that avoids the empty-pane failure. Because that resolution happens at runtime, P4 and P5 (§ 3) remain required empirical validation before this recommendation can be treated as final, not a formality superseded by the type declarations (`Status`, above).
 
 **Known imperfection, accepted:** if tier a's cache is cold *and* tier b's re-derivation misses while a Conductor group really does exist, `Beside` produces a spurious extra group. That is a cosmetic degradation (an extra pane the user can drag-merge), never a stray *empty* pane and never a session dropped into the user's files. Compare option (c), whose failure mode is the empty pane. This asymmetry is the reason to prefer symbolic values even at the cost of an occasional redundant split.
 
