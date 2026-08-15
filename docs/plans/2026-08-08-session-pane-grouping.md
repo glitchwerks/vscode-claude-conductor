@@ -14,7 +14,7 @@ skills_relevant:
 
 **Tracking issue:** [#110 "Spike: dedicated pane for spawned session tabs (default-group like Terminal panel)"](https://github.com/glitchwerks/vscode-claude-conductor/issues/110) — verified open, body fetched 2026-08-08. Issue #110 states its own boundary: *"Out of Scope: Implementing the fix — this issue is scoping/planning only."*
 **Type:** scoping-decision
-**Status:** UNDER REVIEW — not an implementation plan. Phase 0 probes P1–P5 are done, findings posted to issue #110 (https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5274827716, 2026-08-13); D7 is resolved (option (c), in-flight promise guard) and D2 is confirmed (`ViewColumn.Beside`, https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5300114215, 2026-08-15). D1 tier b and D4 need follow-up retests flagged by the findings (delayed-read retest of the label predicate; a longer-window retest of `shellIntegration` timing) before being treated as final. D3, D6, and the confirmation-needed questions in § 8 remain open. **No code should be written from this document yet.**
+**Status:** UNDER REVIEW — not an implementation plan. Phase 0 probes P1–P5 are done, findings posted to issue #110 (https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5274827716, 2026-08-13); D7 is resolved (option (c), in-flight promise guard), D2 is confirmed (`ViewColumn.Beside`, https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5300114215, 2026-08-15), and D3 is confirmed (lazy validation, https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5302105363, 2026-08-15; see § D3 heading for the full rationale). D1 tier b and D4 need follow-up retests flagged by the findings (delayed-read retest of the label predicate; a longer-window retest of `shellIntegration` timing) before being treated as final. D6 and the confirmation-needed questions in § 8 remain open. **No code should be written from this document yet.**
 
 **Prior inputs consumed (not re-derived):**
 - `docs/research/2026-08-08-session-pane-grouping.md` — external prior art on `TerminalLocation`/`ViewColumn`/`tabGroups` and Anthropic's own Claude Code extension, including its 2026-08-08 addendum on `contributes.viewsContainers.secondarySidebar` (see § 6, ruled-out alternatives).
@@ -194,7 +194,7 @@ That one rule subsumes three things that would otherwise be separate mechanisms:
 
 Confirmed via issue #110 (https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5300114215, 2026-08-15) — see that comment for the full rationale chain (why P4/P5's "empirical validation" note refers to D4's own gating probes P1/P3, not a separate untested claim about `Beside` itself).
 
-### D3 — What happens when the tracked group disappears? ⚠️ **Confirmation needed**
+### D3 — What happens when the tracked group disappears? ✅ **Confirmed 2026-08-15**
 
 **Options:** (a) subscribe to `onDidChangeTabGroups` and invalidate on close; (b) validate lazily at launch time; (c) persist the column across sessions in `globalState`.
 
@@ -205,6 +205,8 @@ Confirmed via issue #110 (https://github.com/glitchwerks/vscode-claude-conductor
 - (c) rejected: a column number is meaningless across window layouts, and persisting it recreates the "stale index" failure shape that `_pidToTerminal` and #68 already demonstrate.
 
 Behaviour on invalidation: fall through to D1 tier b, then to D2. Same code path as a cold start.
+
+Confirmed via issue #110 (https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5302105363, 2026-08-15) — see that comment for the full options table and the rationale for why lazy validation, not the eager `onDidChangeTabGroups` subscription, is the mechanism.
 
 ### D4 — Replace the create-then-`moveToEditor` two-step, or layer on top of it? ⚠️ **Confirmation needed** — **the structural decision in this document**
 
