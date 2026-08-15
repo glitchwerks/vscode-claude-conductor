@@ -49,6 +49,7 @@ Directory: `plans/`
 | Document | Type | Status | Issue |
 |---|---|---|---|
 | [`2026-07-29-shared-workspace-config-injection.md`](plans/2026-07-29-shared-workspace-config-injection.md) | scoping-decision | SUPERSEDED by [`specs/2026-08-09-shared-workspace-config-injection.md`](specs/2026-08-09-shared-workspace-config-injection.md) — **do not implement from it** | #81 |
+| [`2026-08-08-session-pane-grouping.md`](plans/2026-08-08-session-pane-grouping.md) | scoping-decision | UNDER REVIEW — 7 decision points and a 5-probe empirical gate unanswered; **no code should be written from it yet** | #110 |
 
 The shared-workspace-config plan was flipped from UNDER REVIEW to SUPERSEDED on
 2026-08-09, when
@@ -87,6 +88,7 @@ Directory: `research/`
 |---|---|
 | [`2026-07-29-shared-workspace-config-injection.md`](research/2026-07-29-shared-workspace-config-injection.md) | Mechanisms for pushing a shared config into every Claude Code CLI session. Feeds the #81 scoping decision. |
 | [`2026-07-29-vscode-claude-conductor-landscape-survey.md`](research/2026-07-29-vscode-claude-conductor-landscape-survey.md) | VS Code and Claude Code CLI capabilities plus competing extensions. |
+| [`2026-08-08-session-pane-grouping.md`](research/2026-08-08-session-pane-grouping.md) | Whether an extension can default-group its own tabs into one pane (à la the built-in Terminal panel) while keeping native drag-out behavior; surveys `TerminalLocation`/`ViewColumn`/`tabGroups` API and Anthropic's own Claude Code extension as prior art. |
 
 Research is an **input** to a spec, never a decision on its own. A ranked
 shortlist reads like a recommendation and is not one.
