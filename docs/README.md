@@ -29,6 +29,7 @@ Directory: `specs/`
 | [`2026-08-04-workspace-folder-launcher-design.md`](specs/2026-08-04-workspace-folder-launcher-design.md) | feature-spec | ACCEPTED | #103 |
 | [`2026-08-07-explorer-open-claude-here.md`](specs/2026-08-07-explorer-open-claude-here.md) | feature-spec | ACCEPTED | #107 |
 | [`2026-08-09-shared-workspace-config-injection.md`](specs/2026-08-09-shared-workspace-config-injection.md) | feature-spec | ACCEPTED — §5.1 and §5.2 answered; four pre-implementation confirmations in §5.6 remain unrun | #81 |
+| [`2026-08-15-hook-self-heal-reliability.md`](specs/2026-08-15-hook-self-heal-reliability.md) | feature-spec | DRAFT — two open questions in §5 need confirmation; **not yet approved for implementation** | #128 |
 
 The foundational spec is the durable anchor: problem statement, audience,
 feature inventory, and roadmap. Per-feature specs reference it rather than
