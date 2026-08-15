@@ -10,8 +10,25 @@ import { ensureHooksInstalled, setupHooksCommand, uninstallHooks } from "./hookI
 import { isSameWorkspaceFolder } from "./workspaceMatch";
 import { FavoritesStore } from "./favoritesStore";
 import { PathExistenceCache } from "./pathExistenceCache";
+import { log } from "./output";
 
 let sessionManager: SessionManager;
+const notifiedErrorSignatures = new Set<string>();
+
+async function runHookSelfHealCheck(context: vscode.ExtensionContext): Promise<void> {
+  try {
+    await ensureHooksInstalled(context);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`Hook self-heal check failed: ${message}`);
+    if (!notifiedErrorSignatures.has(message)) {
+      notifiedErrorSignatures.add(message);
+      void vscode.window.showErrorMessage(
+        'Claude Conductor failed to update Claude session hooks. See the "Claude Conductor" output channel for details.'
+      );
+    }
+  }
+}
 
 /**
  * Normalizes the argument passed to a tree-view-triggered command.
@@ -137,8 +154,19 @@ export function activate(context: vscode.ExtensionContext): void {
   // Check/prompt for hook installation
   // Delayed slightly to avoid being buried by other startup notifications
   setTimeout(() => {
-    ensureHooksInstalled(context);
+    void runHookSelfHealCheck(context);
   }, 3000);
+
+  let lastFocused = false;
+  context.subscriptions.push(
+    vscode.window.onDidChangeWindowState((state) => {
+      const wasFocused = lastFocused;
+      lastFocused = state.focused;
+      if (!wasFocused && state.focused) {
+        void runHookSelfHealCheck(context);
+      }
+    })
+  );
 
   // Tree view providers
   const favoritesStore = new FavoritesStore(context.globalState);

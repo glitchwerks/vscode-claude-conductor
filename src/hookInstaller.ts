@@ -3,11 +3,16 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import * as child_process from "child_process";
+import { debugLog, log } from "./output";
 
 const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
+const LOCK_PATH = `${SETTINGS_PATH}.lock`;
+const STALE_LOCK_THRESHOLD_MS = 5000;
 const STATE_DIR = path.join(os.homedir(), ".claude", "session-state");
 const HOOK_MARKER = "session-state.js";
 const SETUP_DECLINED_KEY = "claudeConductor.hookSetupDeclined";
+const notifiedReloadSignatures = new Set<string>();
+let inFlight: Promise<boolean> | undefined;
 
 /**
  * Resolve the Node.js binary from PATH, then fall back to common install locations.
@@ -109,6 +114,102 @@ function hooksInstalled(settings: Record<string, unknown>): boolean {
 
   const json = JSON.stringify(hooks);
   return json.includes(HOOK_MARKER);
+}
+
+/** Find the first recorded hook script path and convert it to a native path. */
+function getRecordedHookScriptPath(
+  settings: Record<string, unknown>
+): string | undefined {
+  const hooks = settings.hooks as Record<string, unknown[]> | undefined;
+  if (!hooks) {
+    return undefined;
+  }
+
+  for (const entries of Object.values(hooks)) {
+    for (const entry of entries as Array<Record<string, unknown>>) {
+      const innerHooks = entry.hooks as Array<Record<string, unknown>> | undefined;
+      if (!innerHooks) {
+        continue;
+      }
+      for (const hook of innerHooks) {
+        const command = hook.command as string | undefined;
+        if (!command?.includes(HOOK_MARKER)) {
+          continue;
+        }
+
+        const tokenPattern = /"([^"]*)"|(\S+)/g;
+        for (const match of command.matchAll(tokenPattern)) {
+          const token = match[1] ?? match[2];
+          if (!token.includes(HOOK_MARKER)) {
+            continue;
+          }
+          if (process.platform !== "win32") {
+            return token;
+          }
+
+          const gitBashPath = token.match(/^\/([a-zA-Z])(?:\/(.*))?$/);
+          if (!gitBashPath) {
+            return token;
+          }
+          const rest = gitBashPath[2]?.replace(/\//g, "\\") ?? "";
+          return `${gitBashPath[1].toUpperCase()}:\\${rest}`;
+        }
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function recordedHookScriptIsMissing(settings: Record<string, unknown>): boolean {
+  const recordedPath = getRecordedHookScriptPath(settings);
+  return recordedPath === undefined ? false : !fs.existsSync(recordedPath);
+}
+
+/** Acquire the narrow settings-reconciliation lock, stealing it if stale. */
+function acquireReconcileLock(): boolean {
+  const lockContents = (): string =>
+    JSON.stringify({ pid: process.pid, timestamp: Date.now() });
+
+  try {
+    fs.writeFileSync(LOCK_PATH, lockContents(), { flag: "wx" });
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw err;
+    }
+  }
+
+  try {
+    const existing = JSON.parse(fs.readFileSync(LOCK_PATH, "utf8")) as {
+      pid?: unknown;
+      timestamp?: unknown;
+    };
+    if (
+      typeof existing.timestamp === "number" &&
+      Date.now() - existing.timestamp > STALE_LOCK_THRESHOLD_MS
+    ) {
+      fs.writeFileSync(LOCK_PATH, lockContents(), "utf8");
+      return true;
+    }
+  } catch {
+    // An unreadable lock is treated as live contention for this cycle.
+  }
+
+  try {
+    debugLog("Hook path reconciliation skipped due to lock contention.");
+  } catch {
+    // Diagnostics must not turn expected lock contention into a failure.
+  }
+  return false;
+}
+
+function releaseReconcileLock(): void {
+  try {
+    fs.unlinkSync(LOCK_PATH);
+  } catch {
+    // Best effort: stale-lock recovery handles abandoned lock files.
+  }
 }
 
 /**
@@ -268,21 +369,54 @@ function cleanupStateDir(): void {
  * Check and prompt for hook installation on activation.
  * Returns true if hooks are installed (or were just installed).
  */
-export async function ensureHooksInstalled(
+async function doEnsureHooksInstalled(
   context: vscode.ExtensionContext
 ): Promise<boolean> {
   const settings = readSettings();
 
   if (hooksInstalled(settings)) {
     const scriptBase = getHookScriptPath(context);
-    if (!hooksUpToDate(settings, scriptBase)) {
+    const needsReconcile =
+      !hooksUpToDate(settings, scriptBase) || recordedHookScriptIsMissing(settings);
+    if (needsReconcile) {
       // Paths are stale (extension updated to a new directory). Silently
       // reconcile — consent was already granted at initial install.
-      reconcileHookPaths(settings, scriptBase);
-      writeSettings(settings);
-      vscode.window.showInformationMessage(
-        "Claude session hook paths updated for new extension version."
+      const hostHookPath = path.join(
+        context.extensionPath,
+        "hooks",
+        "session-state.js"
       );
+      if (!fs.existsSync(hostHookPath)) {
+        try {
+          log(
+            `Running extension host hook script is missing at ${hostHookPath}; skipping reconciliation.`
+          );
+        } catch {
+          // The reload prompt remains actionable if the output channel is unavailable.
+        }
+        if (!notifiedReloadSignatures.has(hostHookPath)) {
+          notifiedReloadSignatures.add(hostHookPath);
+          void vscode.window.showInformationMessage(
+            "Reload the window to finish updating Claude session hooks."
+          );
+        }
+        return true;
+      }
+
+      if (!acquireReconcileLock()) {
+        return true;
+      }
+
+      try {
+        const freshSettings = readSettings();
+        reconcileHookPaths(freshSettings, scriptBase);
+        writeSettings(freshSettings);
+        void vscode.window.showInformationMessage(
+          "Claude session hook paths updated for new extension version."
+        );
+      } finally {
+        releaseReconcileLock();
+      }
     }
     return true;
   }
@@ -321,6 +455,20 @@ export async function ensureHooksInstalled(
   }
 
   return false;
+}
+
+export function ensureHooksInstalled(
+  context: vscode.ExtensionContext
+): Promise<boolean> {
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = doEnsureHooksInstalled(context).finally(() => {
+    inFlight = undefined;
+  });
+  inFlight = promise;
+  return promise;
 }
 
 /**
