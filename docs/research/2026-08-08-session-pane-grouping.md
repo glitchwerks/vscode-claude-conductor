@@ -176,8 +176,10 @@ already allows.
   kind/`viewType`, reuse the found group's `viewColumn`, fall back to
   `ViewColumn.Beside` — never an independently-computed absolute column) is
   the concrete mechanism to design Conductor's default-grouping behavior
-  around, whether Conductor's sessions stay as `TerminalLocation.Editor`
-  terminals or move to `createWebviewPanel`. The planner should also decide
+  around, whether Conductor's sessions stay as editor-located terminals
+  (currently via `createTerminal` + `workbench.action.terminal.moveToEditor`,
+  not `location: {viewColumn}` — see the corrected requirement 4 above) or
+  move to `createWebviewPanel`. The planner should also decide
   whether editor-group locking is ever appropriate (this report's finding is
   that it is not, given requirement 5, but that is a design call for the
   planner/spec, not this report).
