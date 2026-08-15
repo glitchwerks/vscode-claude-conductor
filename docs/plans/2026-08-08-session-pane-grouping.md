@@ -36,7 +36,11 @@ What #110 (open, body fetched 2026-08-08) asserts as the *observed* result is: *
 
 Reading B is the more likely one on the mechanics (`moveToEditor` acts on the active terminal and the active editor group), and it is a materially different complaint — "my Claude tabs are mixed in with my code" rather than "my window is full of panes." The recommended mechanism below is unchanged either way, but the success criterion is not, so this is resolved by **P4** before the spec is written, not assumed here.
 
-The foundational spec (`docs/specs/2026-07-29-foundational-project-spec.md`) carries the project premise — sessions as editor tabs — and is not restated.
+The foundational spec (`docs/specs/2026-07-29-foundational-project-spec.md`
+§ 1.3 "Why a plain terminal is not enough — the design commitment", `L61`:
+*"The project's answer is to promote each Claude session from a panel
+terminal to a first-class editor tab..."*) carries the project premise —
+sessions as editor tabs — and is not restated.
 
 ---
 
@@ -61,7 +65,10 @@ export interface TerminalEditorLocationOptions {
 
 The same doc comment (`index.d.ts:L7772-L7778`) states: *"The default is the {@link ViewColumn.Active active}. **Columns that do not exist will be created as needed up to the maximum of {@linkcode ViewColumn.Nine}.** Use {@linkcode ViewColumn.Beside} to open the editor to the side of the currently active one."*
 
-That sentence *is* the bug reported in `anthropics/claude-code#83333`: computing an absolute column independently of what actually exists conjures the missing groups, producing stray empty panes. This document therefore has an API-level reason to forbid computed absolute columns (NFR3), not only a second-hand bug report. (The `#83333` report itself was not fetched by this document — it is sourced from `docs/research/2026-08-08-session-pane-grouping.md:L59-L104`, which fetched it 2026-08-08.)
+That sentence *is* the bug reported in `anthropics/claude-code#83333`: computing an absolute column independently of what actually exists conjures the missing groups, producing stray empty panes. This document therefore has an API-level reason to forbid computed absolute columns (NFR3), not only a second-hand bug report. (The `#83333` report — https://github.com/anthropics/claude-code/issues/83333
+— itself was not fetched by this document; it is sourced from
+`docs/research/2026-08-08-session-pane-grouping.md:L63-L112` (§ Shortlist ›
+candidate 1), which fetched it 2026-08-08.)
 
 ### 2.3 `ViewColumn` distinguishes symbolic from resolved values
 
@@ -69,18 +76,21 @@ That sentence *is* the bug reported in `anthropics/claude-code#83333`: computing
 
 ### 2.4 `TabGroup` has **no identity** — only a positional `viewColumn`
 
-`index.d.ts:L19372-L19404`: `TabGroup` exposes `isActive`, `viewColumn: ViewColumn`, `activeTab`, and `tabs: readonly Tab[]`. There is no `id`. `TabGroups` (`index.d.ts:L19406-L19449`) exposes `all`, `activeTabGroup`, `onDidChangeTabGroups`, `onDidChangeTabs`, and two `close()` overloads — and **nothing that moves an existing tab into a chosen group**, matching the gap the research doc found (`docs/research/2026-08-08-session-pane-grouping.md:L133-L136`).
+`index.d.ts:L19372-L19404`: `TabGroup` exposes `isActive`, `viewColumn: ViewColumn`, `activeTab`, and `tabs: readonly Tab[]`. There is no `id`. `TabGroups` (`index.d.ts:L19406-L19449`) exposes `all`, `activeTabGroup`, `onDidChangeTabGroups`, `onDidChangeTabs`, and two `close()` overloads — and **nothing that moves an existing tab into a chosen group**, matching the gap the research doc found (`docs/research/2026-08-08-session-pane-grouping.md` § No prior art found, `L141-L144`).
 
 Two consequences that drive D1 and D3:
 
 1. Holding a `TabGroup` object across turns and diffing it against `onDidChangeTabGroups.closed` is the same reference-fragility class that already forced the `_pidToTerminal` workaround (`src/sessionManager.ts:L42-L49`). Don't hold the object.
-2. `viewColumn` is **positional**: closing group One renumbers the survivors. So "a group still exists at my cached column N" is *not* evidence that group N is still Conductor's group — it may now be the user's code group. Validating by existence alone would silently start dropping session tabs into the user's files, which is exactly requirement 5 of the research brief (`docs/research/2026-08-08-session-pane-grouping.md:L32-L35`).
+2. `viewColumn` is **positional**: closing group One renumbers the survivors. So "a group still exists at my cached column N" is *not* evidence that group N is still Conductor's group — it may now be the user's code group. Validating by existence alone would silently start dropping session tabs into the user's files, which is exactly requirement 5 of the research brief (`docs/research/2026-08-08-session-pane-grouping.md:L35-L39`).
 
 Also note `tabs` *"can be empty if the group has no tabs open"* (`index.d.ts:L19399-L19403`) — present-but-empty is a real state.
 
 ### 2.5 `TabInputTerminal` is stable but carries **no discriminating field**
 
-This resolves open question 3 of the research doc (`docs/research/2026-08-08-session-pane-grouping.md:L204-L209`), which flagged it as unconfirmed. `index.d.ts:L19279-L19287`:
+This resolves open question 3 of the research doc, which originally flagged
+it as unconfirmed and has since been updated in place to record this
+resolution (`docs/research/2026-08-08-session-pane-grouping.md:L212-L226`).
+`index.d.ts:L19279-L19287`:
 
 ```ts
 export class TabInputTerminal {
@@ -117,13 +127,17 @@ However, `launchSession` awaits `_dispatchClaudeCommand`, which can take up to 2
 None of these are answerable by reading. They require a real VS Code instance with the extension loaded, and the existing `debugLog` plumbing (`src/sessionManager.ts:L276-L285`, `src/sessionManager.ts:L321`) is the instrument. **P4 gates the problem statement; P1 and P3 gate D4; P2 gates D1's fallback tier; P5 gates D7's mechanism.**
 
 ### P4 — What does `moveToEditor` actually do to editor groups today? **(gates § 1)**
+
 Launch three sessions from a window that already has source files open in one group. Record, after each launch, `vscode.window.tabGroups.all.length`, each group's `viewColumn`, and each group's tab labels. Distinguishes Reading A from Reading B in § 1. If Reading B holds, the spec's success criterion becomes "session tabs never land in a group containing non-session tabs," which is a stronger and more testable statement than "sessions are grouped."
 
 ### P1 — Does an editor-born terminal still suffer the reference swap? **(gates D4, D5)**
+
 Create a session via `createTerminal({..., location: {viewColumn: vscode.ViewColumn.Beside}})` and log whether `onDidCloseTerminal` fires with a reference that hits tier 1 (identity) in `_handleTerminalClose`, or falls through to tier 2/3 (`src/sessionManager.ts:L314-L389`). If tier 1 always hits, the swap documented at `src/sessionManager.ts:L42-L49` is an artefact of the move, not of editor-located terminals.
 
 ### P3 — Does an editor-born terminal actually *start*? **(gates D4 — highest risk to the recommendation)**
-VS Code starts a terminal's process lazily on first render. For a terminal created with `location: {viewColumn}` **and no explicit `show()`**, verify all three:
+
+`unverified:` VS Code starts a terminal's process lazily on first render — no authoritative source found in `node_modules/@types/vscode/index.d.ts` (checked the `Terminal`, `TerminalOptions`, and `TerminalEditorLocationOptions` doc comments) or the public API reference during this pass; this premise is exactly what P3 exists to confirm empirically, not a settled fact this document asserts. For a terminal created with `location: {viewColumn}` **and no explicit `show()`**, verify all three:
+
 1. Does `terminal.processId` resolve to a number? (If not, `_pidToTerminal` never populates — `src/sessionManager.ts:L295-L309`.)
 2. Does `terminal.shellIntegration` become available via the fast or slow path (`src/sessionManager.ts:L151-L180`), or does the delay fallback (`src/sessionManager.ts:L186-L190`) fire on every launch?
 3. Is an explicit `show()` still required to make either happen?
@@ -131,9 +145,11 @@ VS Code starts a terminal's process lazily on first render. For a terminal creat
 A failure here does not sink the feature — it sinks D4's option A, and the design falls back to D4 option B.
 
 ### P2 — Is `Tab.label` usable as Conductor's tab discriminator? **(gates D1 tier b)**
+
 For a live editor-area session tab, does `Tab.label` equal the terminal name `claude · <folder>` (`src/sessionManager.ts:L10`)? Check it while the tab is open — the empty-name observation in the close path (`src/sessionManager.ts:L318-L319`) is a *close-time* phenomenon and says nothing about live labels. Also check what a user rename does to it.
 
 ### P5 — When does a newly created terminal's tab appear in `tabGroups.all`? **(gates D7)**
+
 Immediately after `createTerminal({location:{viewColumn: Beside}})` returns, is the new tab already visible in `vscode.window.tabGroups.all` (so the resolved column can be cached synchronously, before the first `await`), or does it only appear after an `onDidChangeTabs` event? Determines whether D7 needs a promise-based in-flight guard or a one-line synchronous cache write.
 
 ---
@@ -172,7 +188,7 @@ That one rule subsumes three things that would otherwise be separate mechanisms:
 | (b) **`ViewColumn.Beside`** | Symbolic, resolved by VS Code relative to the active group (`index.d.ts:L7351-L7355`), so it can never conjure an empty pane. Creates a fresh group beside the user's work, which is the requested UX. |
 | (c) A computed absolute column | Forbidden by § 2.2 / NFR3. This is the `anthropics/claude-code#83333` bug. |
 
-**Recommendation — (b) `ViewColumn.Beside`.** Matches the research doc's verdict (`docs/research/2026-08-08-session-pane-grouping.md:L138-L163`) and, per § 2.2, has a type-level guarantee against the empty-pane failure.
+**Recommendation — (b) `ViewColumn.Beside`.** Matches the research doc's verdict (`docs/research/2026-08-08-session-pane-grouping.md` § Verdict, `L146-L171`) and, per § 2.2, has a type-level guarantee against the empty-pane failure.
 
 **Known imperfection, accepted:** if tier a's cache is cold *and* tier b's re-derivation misses while a Conductor group really does exist, `Beside` produces a spurious extra group. That is a cosmetic degradation (an extra pane the user can drag-merge), never a stray *empty* pane and never a session dropped into the user's files. Compare option (c), whose failure mode is the empty pane. This asymmetry is the reason to prefer symbolic values even at the cost of an occasional redundant split.
 
@@ -182,7 +198,7 @@ That one rule subsumes three things that would otherwise be separate mechanisms:
 
 **Recommendation — (b) as the mechanism, (a) as an optional optimisation, (c) rejected.**
 
-- (b) is D1's content-validation rule, already required for the renumbering hazard. It is cheap (a synchronous `tabGroups.all` read), needs no event subscription, and is immune to a missed event. That last property matters here specifically: `reconcile()` exists (`src/sessionManager.ts:L236-L257`) *because* Conductor already got burned by a missed VS Code terminal event, and #68 (open, body fetched 2026-08-08) is the still-open spike into that class of failure. Building the new feature on lazy validation rather than event correctness is learning from that, not ignoring it.
+- (b) is D1's content-validation rule, already required for the renumbering hazard. It is cheap (a synchronous `tabGroups.all` read), needs no event subscription, and is immune to a missed event. That last property matters here specifically: `reconcile()` exists (`src/sessionManager.ts:L236-L257`) *because* Conductor already got burned by a missed VS Code terminal event, and #68 (https://github.com/glitchwerks/vscode-claude-conductor/issues/68, open, body fetched 2026-08-08) is the still-open spike into that class of failure. Building the new feature on lazy validation rather than event correctness is learning from that, not ignoring it.
 - (a) `onDidChangeTabGroups` / `onDidChangeTabs` (`index.d.ts:L19420-L19428`) can invalidate the cache eagerly, but must not be the *only* path. If added, invalidate by re-running validation, not by identity-comparing `TabGroup` objects (§ 2.4).
 - (c) rejected: a column number is meaningless across window layouts, and persisting it recreates the "stale index" failure shape that `_pidToTerminal` and #68 already demonstrate.
 
@@ -194,7 +210,7 @@ Behaviour on invalidation: fall through to D1 tier b, then to D2. Same code path
 
 Arguments for:
 1. **It removes a real race.** `moveToEditor` operates on whatever terminal is *active*, not on a handle. `show(true)` then `executeCommand` (`src/sessionManager.ts:L127-L131`) is an await boundary during which the user or another extension can make a different terminal active — and the wrong terminal gets moved. Creating in the editor area addresses the terminal by construction.
-2. **It is the only option that gives column control at all.** `moveToEditor` takes no argument. Layering means create → move → *repair* with `moveActiveEditor` by positional group index, which the research doc explicitly designates a fallback only (`docs/research/2026-08-08-session-pane-grouping.md:L115-L122`).
+2. **It is the only option that gives column control at all.** `moveToEditor` takes no argument. Layering means create → move → *repair* with `moveActiveEditor` by positional group index, which the research doc explicitly designates a fallback only (`docs/research/2026-08-08-session-pane-grouping.md` § Shortlist › candidate 3, `L123-L130`).
 3. **It may remove the reference swap** documented at `src/sessionManager.ts:L42-L49` — **may**, pending P1.
 4. `preserveFocus: true` reproduces today's non-focus-stealing behaviour exactly (§ 2.6).
 
@@ -202,7 +218,7 @@ Arguments for:
 
 Arguments for: leaves the fragile close-detection surface untouched, so it does not perturb #68's reproduction baseline (see D6); it is the required fallback if P1 or P3 fails.
 
-Arguments against: positional group index is fragile if the user has rearranged panes; it is a create-then-relocate flow, which is exactly the direction the research doc says has no stable support (`docs/research/2026-08-08-session-pane-grouping.md:L133-L136`); and it keeps the wrong-terminal race.
+Arguments against: positional group index is fragile if the user has rearranged panes; it is a create-then-relocate flow, which is exactly the direction the research doc says has no stable support (`docs/research/2026-08-08-session-pane-grouping.md` § No prior art found, `L141-L144`); and it keeps the wrong-terminal race.
 
 **Recommendation — Option A, gated on P1 and P3 both passing.** If P3 shows an editor-born terminal does not start its process (no `processId`, no shell integration) without an explicit `show()`, first try Option A **plus** a retained `show(true)` — that keeps the column control while restoring the render trigger. Only if that also fails does the design fall back to Option B.
 
@@ -220,7 +236,7 @@ So the honest answer to "does this reduce or complicate the machinery": it plaus
 
 ### D6 — Sequencing against #68 ⚠️ **Confirmation needed**
 
-#68 (open, labels `bug` + `pathfinding`, body fetched 2026-08-08) is a spike into why editor-tab-X close detection fails on long-running sessions. Its hypothesis 1 is *"`_pidToTerminal` index drift: PID recorded once but terminal reference can be swapped"* and hypothesis 3 is *"identity drift over time."* Both are consequences of the very `moveToEditor` reference swap that D4 Option A removes. Its acceptance criteria require a written diagnosis and *"note if root cause invalidates PR #47/#48 design assumptions."*
+Issue #68 (https://github.com/glitchwerks/vscode-claude-conductor/issues/68, open, labels `bug` + `pathfinding`, body fetched 2026-08-08) is a spike into why editor-tab-X close detection fails on long-running sessions. Its hypothesis 1 is *"`_pidToTerminal` index drift: PID recorded once but terminal reference can be swapped"* and hypothesis 3 is *"identity drift over time."* Both are consequences of the very `moveToEditor` reference swap that D4 Option A removes. Its acceptance criteria require a written diagnosis and *"note if root cause invalidates PR #47/#48 design assumptions."*
 
 **Two routes, and this is a call for the user, not a gate this document imposes:**
 
@@ -255,7 +271,7 @@ Per § 2.8, two quick user gestures produce overlapping `launchSession` calls. B
 ### Non-functional
 
 - **NFR1** — Stable public API only. No proposed API; no engine bump beyond `"vscode": "^1.93.0"` (`package.json:L8-L10`).
-- **NFR2** — `workbench.action.lockEditorGroup` must not be used. It breaks native drag/drop for the user's *unrelated* files — reported at `anthropics/claude-code#18337`; not fetched by this document, sourced from `docs/research/2026-08-08-session-pane-grouping.md:L96-L103` (fetched 2026-08-08).
+- **NFR2** — `workbench.action.lockEditorGroup` must not be used. It breaks native drag/drop for the user's *unrelated* files — reported at `anthropics/claude-code#18337` (https://github.com/anthropics/claude-code/issues/18337, state CLOSED, re-confirmed via `gh issue view` fetched 2026-08-14); not fetched by this document, sourced from `docs/research/2026-08-08-session-pane-grouping.md:L104-L111` (fetched 2026-08-08).
 - **NFR3** — No `ViewColumn` value may be requested unless it was either symbolic (`Active`/`Beside`) or read back from a group present in `tabGroups.all`. Rationale is type-level, not anecdotal: § 2.2.
 - **NFR4** — No existing tab of the user's is moved, closed, or reordered by this feature.
 - **NFR5** — Launch focus behaviour is unchanged: the session tab appears without stealing focus, matching `show(true)` today (§ 2.6). Achieved via `preserveFocus: true`.
@@ -275,12 +291,12 @@ Per § 2.8, two quick user gestures produce overlapping `launchSession` calls. B
 
 **Out of scope**
 
-- **Implementing any of it.** #110 is scoping only, by its own statement. Implementation needs a `feature-spec` in `docs/specs/` first (per `CLAUDE.md § Spec-Driven Development` — this is a user-visible behaviour change) and a follow-up issue (§ 9).
+- **Implementing any of it.** #110 is scoping only, by its own statement. Implementation needs a `feature-spec` in `docs/specs/` first (per `CLAUDE.md § Spec-Driven Development`, `L11`, `L18`: *"adds or removes a user-visible feature, command, setting, keybinding, or UI surface"* requires a spec — this is a user-visible behaviour change) and a follow-up issue (§ 9).
 - **Any change to sidebar tree grouping.** `groupByProjectRoot` (`src/projectGrouping.ts:L99`) and the three `TreeDataProvider` implementations that consume it — `ActiveSessionsProvider` (`src/treeView.ts:L80-L81`), `RecentProjectsProvider` (`src/treeView.ts:L214-L215`), `FavoritesProvider` (`src/treeView.ts:L316`) — are sidebar-list grouping, a different mechanism from editor-group placement. #110 lists this out of scope explicitly and this document does not touch it.
 - **Removing `_pidToTerminal` or the three-tier close detection.** Deferred to a follow-up gated on #68's diagnosis (D5).
-- **Migrating sessions from terminals to webview panels.** The research doc covers webviews (`docs/research/2026-08-08-session-pane-grouping.md:L124-L131`) because the survey was written before the tab kind was settled; Conductor's sessions are terminals and stay terminals here.
-- **A declarative `contributes.viewsContainers` panel.** Ruled out by the research doc (`docs/research/2026-08-08-session-pane-grouping.md:L124-L131`): a panel container hosts a fixed, `package.json`-declared view set, not a dynamically growing draggable tab strip. Conductor contributes exactly one Activity Bar container with three declared views (`package.json:L111-L134`); nothing in that mechanism produces Terminal-panel-like per-instance tabs.
-- **A declarative `contributes.viewsContainers.secondarySidebar` container.** A follow-up check for #110's scoping found a third `viewsContainers` location, `secondarySidebar`, targeting the Secondary Side Bar / auxiliary bar (where GitHub Copilot Chat lives) — it is stable, shipped (`microsoft/vscode` PR #261619, merged 2025-08-25), and unguarded by any proposed-API check, so an extension can default a view container there at install time with no user drag needed. Recorded as the same structural dead end as the panel bullet above, not a live option: it is exactly as fixed/declarative as `panel` — a `package.json`-declared view set, not a runtime API to spawn a new, individually-draggable tab. It does not change the D1–D4 recommendation. Full sourcing (PR #261619, the `viewsExtensionPoint.ts` blob sha, fetch date) is in `docs/research/2026-08-08-session-pane-grouping.md`, "Addendum (2026-08-08)" section; not re-derived here.
+- **Migrating sessions from terminals to webview panels.** The research doc covers webviews (`docs/research/2026-08-08-session-pane-grouping.md` § Shortlist › candidate 4, `L132-L139`) because the survey was written before the tab kind was settled; Conductor's sessions are terminals and stay terminals here.
+- **A declarative `contributes.viewsContainers` panel.** Ruled out by the research doc (`docs/research/2026-08-08-session-pane-grouping.md` § Shortlist › candidate 4, `L132-L139`): a panel container hosts a fixed, `package.json`-declared view set, not a dynamically growing draggable tab strip. Conductor contributes exactly one Activity Bar container with three declared views (`package.json:L111-L134`); nothing in that mechanism produces Terminal-panel-like per-instance tabs.
+- **A declarative `contributes.viewsContainers.secondarySidebar` container.** A follow-up check for #110's scoping found a third `viewsContainers` location, `secondarySidebar`, targeting the Secondary Side Bar / auxiliary bar (where GitHub Copilot Chat lives) — it is stable, shipped (`microsoft/vscode` PR https://github.com/microsoft/vscode/pull/261619 `#261619`, state MERGED, merged 2025-08-25, re-confirmed via `gh pr view` fetched 2026-08-14), and unguarded by any proposed-API check, so an extension can default a view container there at install time with no user drag needed. Recorded as the same structural dead end as the panel bullet above, not a live option: it is exactly as fixed/declarative as `panel` — a `package.json`-declared view set, not a runtime API to spawn a new, individually-draggable tab. It does not change the D1–D4 recommendation. Full sourcing (PR #261619, the `viewsExtensionPoint.ts` blob sha, fetch date) is in `docs/research/2026-08-08-session-pane-grouping.md`, "Addendum (2026-08-08)" section; not re-derived here.
 - **Any post-hoc relocation of already-open session tabs.** No stable API exists (§ 2.4). Existing tabs stay where they are; only new tabs are steered. If the user wants existing tabs gathered, that is separate design work on the `moveActiveEditor` fallback.
 
 ---
@@ -289,7 +305,7 @@ Per § 2.8, two quick user gestures produce overlapping `launchSession` calls. B
 
 | Risk | What would have to be true |
 |---|---|
-| Editor-born terminals never start their process, so `processId` never resolves and shell integration never activates — breaking both the PID index and the fast dispatch path. | VS Code defers terminal process start until first render, and `location: {viewColumn}` without `show()` does not render. **This is the single largest threat to D4 Option A.** P3 answers it; the escape hatch is Option A + retained `show()`, then Option B. |
+| Editor-born terminals never start their process, so `processId` never resolves and shell integration never activates — breaking both the PID index and the fast dispatch path. | `unverified:` VS Code defers terminal process start until first render, and `unverified:` `location: {viewColumn}` without `show()` does not render — no authoritative source found in the installed `@types/vscode` declarations or the public API reference during this pass. **This is the single largest threat to D4 Option A.** P3 answers it; the escape hatch is Option A + retained `show()`, then Option B. |
 | Sessions get routed into the user's code group after a pane reshuffle. | Validation checks column existence instead of group *content* (§ 2.4). D1's content rule is what prevents this; it must not be simplified away during implementation. |
 | Stray empty editor groups appear. | An absolute column is computed rather than read from `tabGroups.all` (§ 2.2 / NFR3). |
 | Native drag-out silently stops working. | `lockEditorGroup` gets introduced later as a "defence" for the group (NFR2). |
@@ -326,8 +342,8 @@ A milestone grouping 1–3 would be appropriate; 4 belongs with #68's follow-ups
 ## Verification note
 
 - **Repo claims** were read at commit `c65db06` (`main`, the checkout's `HEAD` at planning time), from `src/sessionManager.ts`, `src/extension.ts`, `src/quickPick.ts`, `package.json`, `test/mocks/vscode.ts`, `docs/README.md`, and `docs/sdd-workflow.md`.
-- **VS Code API claims** were read from `node_modules/@types/vscode/index.d.ts`, resolved from `@types/vscode` `^1.93.0` (`package.json:L308`). Line numbers are stable for that installed version and should be re-checked after a dependency bump. This resolved research open question 3 (`docs/research/2026-08-08-session-pane-grouping.md:L204-L209`): `TabInputTerminal` **is** stable — and, more usefully, carries no discriminating field (§ 2.5).
-- **GitHub claims**: #110 and #68 were fetched via `WebFetch` on 2026-08-08 and their titles, states, and bodies read directly. The `mcp__github__*` tools and a shell were not available to this planning pass, so `gh`-based verification (labels via API, cross-referencing PRs #47/#48) was not performed; #68's labels and milestone come from the fetched issue page.
-- **External claims not independently fetched**: `anthropics/claude-code#83333`, `anthropics/claude-code#18337`, and `microsoft/vscode#145830` were not fetched by this document. They are cited via `docs/research/2026-08-08-session-pane-grouping.md`, which fetched all three on 2026-08-08. Where possible the underlying claim was re-grounded in the type definitions instead — see § 2.2, which replaces the `#83333` anecdote with the `TerminalEditorLocationOptions` doc comment as the authority for NFR3.
+- **VS Code API claims** were read from `node_modules/@types/vscode/index.d.ts`, resolved from `@types/vscode` `^1.93.0` (`package.json:L308`). Line numbers are stable for that installed version and should be re-checked after a dependency bump. This resolved the research doc's open question 3, which originally flagged it as unconfirmed and has since been updated in place to record the resolution (`docs/research/2026-08-08-session-pane-grouping.md:L212-L226`): `TabInputTerminal` **is** stable — and, more usefully, carries no discriminating field (§ 2.5).
+- **GitHub claims**: #110 and #68 (https://github.com/glitchwerks/vscode-claude-conductor/issues/68) were fetched via `WebFetch` on 2026-08-08 and their titles, states, and bodies read directly. The `mcp__github__*` tools and a shell were not available to this planning pass, so `gh`-based verification (labels via API, cross-referencing PRs #47/#48) was not performed; #68's labels and milestone come from the fetched issue page.
+- **External claims not independently fetched**: `anthropics/claude-code#83333` (https://github.com/anthropics/claude-code/issues/83333, state OPEN as re-confirmed via `gh issue view` fetched 2026-08-14), `anthropics/claude-code#18337` (https://github.com/anthropics/claude-code/issues/18337, state CLOSED as re-confirmed via `gh issue view` fetched 2026-08-14), and `microsoft/vscode#145830` (https://github.com/microsoft/vscode/issues/145830) were not fetched by this document. They are cited via `docs/research/2026-08-08-session-pane-grouping.md`, which fetched all three on 2026-08-08. Where possible the underlying claim was re-grounded in the type definitions instead — see § 2.2, which replaces the `#83333` anecdote with the `TerminalEditorLocationOptions` doc comment as the authority for NFR3.
 - **Not verified — requires a running VS Code instance:** everything in § 3. In particular the § 1 problem statement is deliberately left as two readings rather than asserted, because P4 was not runnable here.
 - **Not verified:** no tests were run and no code was compiled; this pass wrote no code.

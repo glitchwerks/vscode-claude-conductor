@@ -7,7 +7,8 @@ date: 2026-08-08
 ## Idea
 
 Make spawned Claude Code session tabs (currently `vscode.window.createTerminal`
-instances, some moved to editor tabs) collect into one dedicated tab group by
+instances, some moved to editor tabs — `src/sessionManager.ts:L120-L131`)
+collect into one dedicated tab group by
 default — mirroring how VS Code's built-in Terminal panel groups all terminal
 tabs together — while still letting a user drag an individual session tab out
 into its own separate editor group, exactly as the built-in Terminal panel
@@ -26,8 +27,11 @@ already allows.
    API that can't ship to the Marketplace, and not an internal/first-party-only
    capability.
 4. Applies to both of Conductor's current/likely tab kinds: terminals
-   (`vscode.window.createTerminal` with `location: TerminalLocation.Editor`)
-   and, if considered, webview panels (`vscode.window.createWebviewPanel`).
+   (currently created via `vscode.window.createTerminal` with no `location`,
+   then relocated with the `workbench.action.terminal.moveToEditor` command —
+   not the `location: {viewColumn}` constructor option — per
+   `src/sessionManager.ts:L120-L131`) and, if considered, webview panels
+   (`vscode.window.createWebviewPanel`).
 5. Must not silently break unrelated user tabs/groups (a documented failure
    mode — see Anthropic's own Claude Code extension, ranked #1 below) — a
    candidate that "solves" grouping by locking the editor group or by
@@ -62,6 +66,7 @@ already allows.
 - **Relevance:** addresses requirement 1 directly and requirement 4 (webview panels) — this is the closest possible prior art, because it is the *same* problem (many Claude session panels, group them) solved by a sibling Anthropic extension, on public API only. Does not fully address requirement 5 — see below.
 - **Maturity:** issue #83333 filed against extension "v2.1.220"; unresolved as of the fetch date; no merged fix referenced in the issue body.
 - **Worth borrowing:** the pattern extracted from the minified `extension.js` in the issue body (quoted verbatim in the issue) is:
+
   ```js
   createPanel(e, t, r) {
     let n = false, i;
@@ -74,11 +79,14 @@ already allows.
     }
   }
   ```
+
   The reusable idea: call `vscode.window.tabGroups.all` (stable API), find a
   group whose tabs are your own tab kind (a `Tab` whose `input` is a
-  `TabInputWebview` with a matching `viewType`, or a `TabInputTerminal` for
-  terminal-editor tabs — `from training, not checked`: the issue's minified
-  code does not expose the exact matcher predicate), and reuse that group's
+  `TabInputWebview` with a matching `viewType`, or `unverified:` a
+  `TabInputTerminal` for terminal-editor tabs — the issue's minified code
+  does not expose the exact matcher predicate, so this specific tab-kind
+  branch is inferred from the pattern shape, not confirmed against source),
+  and reuse that group's
   `viewColumn` instead of always requesting `ViewColumn.Beside`. Because
   `viewColumn` here is a real resolved column (`One`/`Two`/`Three`…, not the
   symbolic `Beside`), a fresh tab opened with that column lands as a **new
@@ -107,9 +115,9 @@ already allows.
 
 - **URL:** https://code.visualstudio.com/api/references/vscode-api (fetched 2026-08-08, `TabGroups`/`TabGroup`/`Tab` section); type source: `microsoft/vscode` `src/vscode-dts/vscode.d.ts` on `main` (fetched 2026-08-08, exact line range not resolved — the file exceeded the fetch tool's summarization window; see Open questions)
 - **Relevance:** addresses requirement 1 (read/enumerate existing groups) and requirement 3 (this surface is stable, not proposed — confirmed by its presence in `vscode.d.ts` on `main` rather than any `vscode.proposed.*.d.ts` file, and by its use in shipped, Marketplace-published extensions). Does not address requirement 2 on its own — see the gap noted in the "No prior art found" section: the stable API has no `move`-into-a-specific-group primitive for cross-group placement; `tabGroups` is read-oriented (`groups`, `activeTabGroup`, `onDidChangeTabGroups`, `close()`), confirmed by https://github.com/microsoft/vscode/issues/145830 (fetched 2026-08-08) discussing (and closing `wont-fix`) a request to extend the *existing* `move` capability to accept multiple tabs at once — implying today's `move`-adjacent surface is narrow and was deliberately not broadened.
-- **Maturity:** `tabGroups` shipped stable years ago (referenced fixes as far back as `microsoft/vscode#131595`, closed 2021, milestone September 2021); actively maintained repo, Microsoft-owned, MIT license.
+- **Maturity:** `tabGroups` shipped stable years ago (referenced fixes as far back as https://github.com/microsoft/vscode/issues/131595, `microsoft/vscode#131595` "vscode.TerminalLocation.Editor always goes to the first view column", closed, milestone September 2021, state re-confirmed CLOSED via `gh issue view` fetched 2026-08-14); actively maintained repo, Microsoft-owned, MIT license.
 - **Worth borrowing:** the read-side API (`tabGroups.all`, `Tab.input` discrimination via `TabInputWebview`/`TabInputTerminal`/`TabInputText`, `Tab.group.viewColumn`) is the correct, stable building block for "does a Conductor group already exist, and what's its viewColumn" — this is the same primitive candidate #1 uses.
-- **What to avoid:** don't rely on `TabGroups` for *moving* an already-open tab into a target group after the fact — that direction of the API is either absent or, per `microsoft/vscode#133532` ("Tab model API", fetched 2026-08-08), was proposed with `move()` on `Tab` but the issue thread does not confirm this shipped as described; treat any tab-to-tab-group move capability as `unverified:` until confirmed against the current `vscode.d.ts`.
+- **What to avoid:** don't rely on `TabGroups` for *moving* an already-open tab into a target group after the fact — that direction of the API is either absent or, per https://github.com/microsoft/vscode/issues/133532, `microsoft/vscode#133532` ("Tab model API", CLOSED, re-confirmed via `gh issue view` fetched 2026-08-14), was proposed with `move()` on `Tab` but the issue thread does not confirm this shipped as described; treat any tab-to-tab-group move capability as `unverified:` until confirmed against the current `vscode.d.ts`.
 - **Lift effort:** drop-in (it's a stable API surface, not a library) — but the "join an existing group" trick still requires writing the same `find`-and-reuse-`viewColumn` logic as candidate #1; there is no single call that does it.
 
 ### 3. `moveActiveEditor` built-in command — positional group targeting via `executeCommand`, not a typed API
@@ -132,8 +140,8 @@ already allows.
 
 ## No prior art found
 
-- **A stable API to move an already-open tab into a specific pre-existing tab group by group identity (not positional index, not "the active editor").** Searched axes: direct (`TabGroups.move`, `Tab.move`), problem-shape (`microsoft/vscode#145830`, `#133532`, `#188572`), vendor (`vscode.d.ts` on `main`). No candidate provides this; every real-world implementation found (candidate #1) works around the gap by influencing *where a new tab opens* (via `viewColumn` reuse) rather than moving an existing tab after the fact. The implementer should expect to rely exclusively on "choose the right `viewColumn`/`location` at creation time," not "create then relocate."
-- **A documented, extension-facing equivalent of the Terminal panel's own internal tab-group management.** Searched: `microsoft/vscode#142909` (determine view location via API, closed `not planned`), `#131196` (locked editor groups test), Extension API guidelines wiki. No issue or doc confirms the Terminal panel's grouping/drag behavior is built on any surface available to third-party extensions; it appears to be first-party/internal. Implementer should not expect to literally reuse the Terminal panel's mechanism — only to approximate its effect via `ViewColumn` reuse (candidate #1/#2).
+- **A stable API to move an already-open tab into a specific pre-existing tab group by group identity (not positional index, not "the active editor").** Searched axes: direct (`TabGroups.move`, `Tab.move`), problem-shape (https://github.com/microsoft/vscode/issues/145830 `#145830`; https://github.com/microsoft/vscode/issues/133532 `#133532`, CLOSED; https://github.com/microsoft/vscode/issues/188572 `#188572`, OPEN — states via `gh issue view` fetched 2026-08-14), vendor (`vscode.d.ts` on `main`). No candidate provides this; every real-world implementation found (candidate #1) works around the gap by influencing *where a new tab opens* (via `viewColumn` reuse) rather than moving an existing tab after the fact. The implementer should expect to rely exclusively on "choose the right `viewColumn`/`location` at creation time," not "create then relocate."
+- **A documented, extension-facing equivalent of the Terminal panel's own internal tab-group management.** Searched: https://github.com/microsoft/vscode/issues/142909 `microsoft/vscode#142909` (determine view location via API, closed `not planned`, state re-confirmed CLOSED via `gh issue view` fetched 2026-08-14), https://github.com/microsoft/vscode/issues/131196 `#131196` (locked editor groups test, CLOSED, re-confirmed via `gh issue view` fetched 2026-08-14), Extension API guidelines wiki. No issue or doc confirms the Terminal panel's grouping/drag behavior is built on any surface available to third-party extensions; it appears to be first-party/internal. Implementer should not expect to literally reuse the Terminal panel's mechanism — only to approximate its effect via `ViewColumn` reuse (candidate #1/#2).
 
 ## Verdict
 
@@ -184,12 +192,12 @@ already allows.
 - The exact predicate Anthropic's Claude Code extension uses inside
   `tabGroups.all.find(...)` to recognize "a group that already contains one
   of my own tabs" was not visible — the issue #83333 body quotes the
-  surrounding logic but elides the `find()` callback itself. `from training,
-  not checked`: the natural implementation is matching `tab.input instanceof
+  surrounding logic but elides the `find()` callback itself. `unverified:`
+  the natural implementation is matching `tab.input instanceof
   vscode.TabInputWebview && tab.input.viewType === <own viewType>` (or
-  `TabInputTerminal` for editor-located terminals), but this specific
-  callback body was not confirmed against source — the extension is closed-
-  source and only the minified snippet in the issue is public.
+  `TabInputTerminal` for editor-located terminals) — this is inferred from
+  the pattern shape, not confirmed against source, because the extension is
+  closed-source and only the minified snippet in the issue is public.
 - The full stable `vscode.d.ts` `TabGroups`/`TabGroup`/`Tab` interface text
   could not be fetched verbatim in this session — the file is large enough
   that the fetch tool's summarization pass did not reach the tabs section
@@ -201,12 +209,21 @@ already allows.
   GitHub issues discussing the same surface, but a verbatim source-of-truth
   read of the current type definitions is still worth doing before
   implementation starts.
-- Whether `TabInputTerminal` (as opposed to `TabInputWebview`/`TabInputText`)
-  is part of the *stable* `vscode.d.ts` today, versus only `vscode.proposed.
-  *.d.ts`, was not conclusively confirmed in this session (see candidate #2).
-  Since Conductor's current tabs are terminals moved to editor location, this
-  should be checked directly against the installed `@types/vscode` version's
-  `.d.ts` before relying on `TabInputTerminal` for tab-kind matching.
+- **Resolved, in place (see `docs/plans/2026-08-08-session-pane-grouping.md`
+  § 2.5 for the full analysis):** `TabInputTerminal` **is** part of the
+  *stable* `vscode.d.ts`, not `vscode.proposed.*.d.ts` — confirmed directly
+  against the installed `@types/vscode` `1.115.0` declaration
+  (`package-lock.json:L578-L581`) at
+  `node_modules/@types/vscode/index.d.ts:L19279-L19287`, a bare
+  `export class TabInputTerminal { constructor(); }` with no fields, and its
+  inclusion in the stable `Tab.input` union type at `index.d.ts:L19307-L19310`.
+  Since Conductor's current tabs are terminals moved to editor location
+  (`src/sessionManager.ts:L120-L131`), this confirms `TabInputTerminal` is
+  usable for tab-*kind* matching — but because the class carries no
+  discriminating field of its own, it cannot alone distinguish a Conductor
+  session tab from any other extension's (or the user's own manually-moved)
+  editor-area terminal tab; `Tab.label` is the only usable discriminator on
+  the stable `Tab` interface for that purpose.
 
 ## Addendum (2026-08-08) — Secondary Side Bar contribution point supersedes part of candidate #4
 
@@ -230,15 +247,20 @@ fetch, so this addendum exists to correct that gap for this repo's records.
   the `secondarySidebar` *container* key has no such gate — it is reachable
   by any extension's `package.json` today, no proposed-API opt-in required.
 - **Shipped, not merely proposed.** PR https://github.com/microsoft/vscode/pull/261619
-  (fetched 2026-08-08) closes issue https://github.com/microsoft/vscode/issues/151681
-  (opened 2022-06-10 by Eric Amodio requesting exactly this for GitLens; fetched
-  2026-08-08) and merged to `main` 2025-08-25 (commit `03baef1`, August 2025
-  milestone) — renaming `auxiliaryBar` to `secondarySidebar` in the schema per
-  reviewer feedback on naming. Test-plan issue
-  https://github.com/microsoft/vscode/issues/264346 (opened 2025-09-01,
-  fetched 2026-08-08) covers verifying multi-container registration, hide/
-  unhide, drag-to-primary-sidebar, and the default active container — framed
-  there as validating a feature already merged, not as an open proposal.
+  ("Support registering views to the secondary side bar", state MERGED,
+  re-confirmed via `gh pr view` fetched 2026-08-14; originally fetched
+  2026-08-08) closes issue https://github.com/microsoft/vscode/issues/151681
+  (state CLOSED, re-confirmed via `gh issue view` fetched 2026-08-14; opened
+  2022-06-10 by Eric Amodio requesting exactly this for GitLens; originally
+  fetched 2026-08-08) and merged to `main` 2025-08-25 (commit `03baef1`,
+  August 2025 milestone) — renaming `auxiliaryBar` to `secondarySidebar` in
+  the schema per reviewer feedback on naming. Test-plan issue
+  https://github.com/microsoft/vscode/issues/264346 (state CLOSED,
+  re-confirmed via `gh issue view` fetched 2026-08-14; opened 2025-09-01,
+  originally fetched 2026-08-08) covers verifying multi-container
+  registration, hide/unhide, drag-to-primary-sidebar, and the default active
+  container — framed there as validating a feature already merged, not as an
+  open proposal.
   The official docs page `code.visualstudio.com/api/references/contribution-points`
   (fetched 2026-08-08) still describes only `activitybar` and `panel` — the
   docs lag the shipped schema; do not treat that page as authoritative for

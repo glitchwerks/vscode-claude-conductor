@@ -5,6 +5,8 @@ metadata:
   type: project
 ---
 
+# Invoking codex-companion.mjs and npm/tsc against a worktree
+
 The Bash tool in this environment blocks chaining `cd <dir> && <cmd>` (and
 similar with `;`/`||`), and this project's worktrees live at
 `.worktrees/<branch>/`. Two flags avoid ever needing a directory change:
@@ -22,9 +24,14 @@ similar with `;`/`||`), and this project's worktrees live at
   brief calls for writing it to `.tmp/codex-prompt.*` first anyway).
 - For `npm` commands (`lint`, `test`, `compile`) against a worktree, use
   `npm --prefix <worktree-path> run <script>` or
-  `npm --prefix <worktree-path> exec -- <bin> <args>` (for `tsc` calls not
-  wrapped in a package.json script, e.g. `npx tsc --noEmit -p
-  tsconfig.test.json`). Both avoid any `cd`.
+  `npm --prefix <worktree-path> exec -- <bin> <args>` for a bin not wrapped
+  in a package.json script. `tsconfig.test.json` resolves relative to the
+  shell's current cwd, not to `--prefix` — so a bare
+  `npx tsc --noEmit -p tsconfig.test.json` silently uses the wrong config
+  when run from outside the worktree. Qualify the `-p` path explicitly too,
+  e.g. for `tsc`:
+  `npm --prefix "<worktree-path>" exec -- tsc --noEmit -p
+  "<worktree-path>/tsconfig.test.json"`. Both flags together avoid any `cd`.
 
 See [[codex-companion-background-polling]] for the foreground-command-moves-
 to-background behavior observed with `task --write` on a ~3 minute run.

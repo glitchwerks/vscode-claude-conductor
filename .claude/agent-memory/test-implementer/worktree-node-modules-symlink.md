@@ -5,6 +5,8 @@ metadata:
   type: project
 ---
 
+# Worktree node_modules must not be symlinked on this host
+
 On this Windows host (Git Bash), `ln -s <main-checkout>/node_modules
 <worktree>/node_modules` does **not** create a symlink or NTFS junction — it
 silently performs a full recursive **copy** (confirmed via differing inodes
@@ -25,7 +27,7 @@ risking the main checkout's node_modules).
 
 **How to apply:** in `.worktrees/<branch>/` worktrees in this repo (or any
 Windows-host repo using the same convention, see
-[[../../../../CLAUDE.md]] § Worktrees), don't try to shortcut dependency
+[[../../../CLAUDE.md]] § Worktrees), don't try to shortcut dependency
 install by symlinking node_modules from the main checkout. Either run
 `npm install` in the worktree directly, or — if you only need to *run* tests
 once without installing (e.g. as test-implementer confirming red/green) —
