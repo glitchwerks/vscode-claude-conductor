@@ -196,6 +196,67 @@ describe("reconcileHookPaths", () => {
 
 import { ensureHooksInstalled } from "../src/hookInstaller.js";
 
+// ---------------------------------------------------------------------------
+// Shared helpers for issue #128 (hook self-heal reliability) tests below.
+//
+// FR-6 adds a lockfile write (`~/.claude/settings.json.lock`) around the same
+// readSettings()/writeSettings() sequence, going through the SAME
+// fs.writeFileSync mock every other test in this file already uses to assert
+// on settings.json writes. Without filtering it out, `writeMock.toHaveBeenCalled()`
+// becomes vacuously true (a lock write satisfies it) and
+// `writeMock.not.toHaveBeenCalled()` becomes a false negative the moment a
+// lock is legitimately acquired-and-released around a no-op cycle. Every
+// settings.json write assertion below (including the two pre-existing
+// integration tests immediately following this block) routes through this
+// helper instead of asserting on the raw writeFileSync mock.
+// ---------------------------------------------------------------------------
+
+function settingsWrites(mock: ReturnType<typeof vi.fn>): unknown[][] {
+  return mock.mock.calls.filter((args) => {
+    const p = String(args[0]);
+    return p.includes("settings.json") && !p.endsWith(".lock");
+  });
+}
+
+/**
+ * Configures fs.readFileSync/fs.existsSync so FR-6's lockfile is always
+ * reported absent (no contention) -- for tests that are not specifically
+ * exercising FR-6's lock mechanics. Without this, an unconfigured
+ * fs.existsSync auto-mock defaults to falsy for the lock path too, which is
+ * harmless, but leaving fs.readFileSync unconfigured for a ".lock" read
+ * would return `undefined` and could throw deep inside a stale-lock JSON
+ * parse the test never intended to exercise.
+ *
+ * `extraExistsSync` lets a test differentiate specific non-lock paths (e.g.
+ * "this recorded hook script path is missing") by returning a boolean, or
+ * `undefined` to fall through to the default (present).
+ */
+function mockNoLockContention(
+  settingsForRead: Record<string, unknown>,
+  extraExistsSync?: (nativePath: string) => boolean | undefined
+): void {
+  (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+    const s = String(p);
+    if (s.endsWith(".lock")) {
+      throw Object.assign(new Error("ENOENT: no such file or directory"), {
+        code: "ENOENT",
+      });
+    }
+    return JSON.stringify(settingsForRead);
+  });
+  (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+    const s = String(p);
+    if (s.endsWith(".lock")) {
+      return false;
+    }
+    const override = extraExistsSync?.(s);
+    if (override !== undefined) {
+      return override;
+    }
+    return true;
+  });
+}
+
 // Minimal ExtensionContext stub
 function makeContext(extensionPath: string) {
   return {
@@ -231,13 +292,15 @@ describe("ensureHooksInstalled — path reconciliation", () => {
     const oldScriptBase = getHookScriptPath(oldContext);
     const newScriptBase = getHookScriptPath(newContext);
 
-    // Arrange: settings on disk have hooks pointing at OLD_PATH
-    const oldSettings = makeSettingsWithHooks(oldScriptBase);
-    (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue(
-      JSON.stringify(oldSettings)
-    );
+    // Arrange: settings on disk have hooks pointing at OLD_PATH. FR-2/FR-2a
+    // (issue #128) add an fs.existsSync-gated check on top of the plain
+    // string comparison this test originally exercised alone -- explicitly
+    // report every non-lock path as present so this regression test keeps
+    // exercising "paths differ, host is healthy, reconcile succeeds" rather
+    // than accidentally tripping FR-2a's stale-host guard via an
+    // unconfigured (falsy) existsSync auto-mock.
+    mockNoLockContention(makeSettingsWithHooks(oldScriptBase));
     const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
-    writeMock.mockImplementation(() => {});
 
     // Sanity: old and new script bases must differ — otherwise the test is vacuous
     expect(oldScriptBase).not.toBe(newScriptBase);
@@ -248,8 +311,10 @@ describe("ensureHooksInstalled — path reconciliation", () => {
     const result = await ensureHooksInstalled(newContext);
 
     expect(result).toBe(true);
-    // writeFileSync should have been called (settings were rewritten)
-    expect(writeMock).toHaveBeenCalled();
+    // writeFileSync should have been called against settings.json (settings
+    // were rewritten) -- filtered via settingsWrites() so FR-6's lockfile
+    // write, which goes through this same mock, doesn't make this vacuous.
+    expect(settingsWrites(writeMock).length).toBeGreaterThanOrEqual(1);
     // showInformationMessage must NOT have been called with the consent prompt
     const consentCallArgs = showInfoSpy.mock.calls.find((args) =>
       String(args[0]).includes("requires adding hooks")
@@ -269,16 +334,28 @@ describe("ensureHooksInstalled — path reconciliation", () => {
     const currentScriptBase = getHookScriptPath(context);
     const currentSettings = makeSettingsWithHooks(currentScriptBase);
 
-    (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue(
-      JSON.stringify(currentSettings)
-    );
+    // FR-2/FR-2a (issue #128): explicitly report the recorded (== freshly
+    // derived, since paths already match) script path as present on disk.
+    // Without this, an unconfigured existsSync auto-mock defaults to falsy,
+    // which would make FR-2a's stale-host guard fire a spurious reload
+    // prompt on a genuinely healthy, already-up-to-date install.
+    mockNoLockContention(currentSettings);
     const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
-    writeMock.mockImplementation(() => {});
+
+    const { window } = await import("../test/mocks/vscode.js");
+    const showInfoSpy = vi.spyOn(window, "showInformationMessage");
 
     const result = await ensureHooksInstalled(context);
 
     expect(result).toBe(true);
-    expect(writeMock).not.toHaveBeenCalled();
+    expect(settingsWrites(writeMock)).toHaveLength(0);
+    const reloadCallArgs = showInfoSpy.mock.calls.find((args) =>
+      /reload/i.test(String(args[0]))
+    );
+    expect(
+      reloadCallArgs,
+      "a healthy, already-up-to-date install must not trigger FR-2a's reload prompt"
+    ).toBeUndefined();
   });
 });
 
@@ -715,5 +792,575 @@ describe("reconcileHookPaths — quoted script base round-trip (issue #106 regre
     expect(notifCmd).toBe(`${newScriptBase} idle`);
     expect(submitCmd).toBe(`${newScriptBase} active`);
     expect(stopCmd).toBe(`${newScriptBase} stop`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #128 — hook self-heal reliability
+// (docs/specs/2026-08-15-hook-self-heal-reliability.md)
+//
+// FR-2 / FR-2a / FR-4 / FR-5 / FR-6 all live inside ensureHooksInstalled's
+// already-installed branch. None of the requirements mandate a new exported
+// helper function name for the recorded-path extraction or the lockfile
+// mechanics, so every test below asserts on ensureHooksInstalled's
+// OBSERVABLE behavior (whether settings.json gets written, whether a
+// reload/error popup is shown) rather than on any particular internal helper
+// shape -- consistent with leaving the implementer free to choose how the
+// extraction and locking are structured internally.
+// ---------------------------------------------------------------------------
+
+describe("ensureHooksInstalled — FR-2: recorded-path existence check, independent of hooksUpToDate", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
+  });
+
+  it("attempts reconciliation even when hooksUpToDate() reports true, because the recorded path is missing on disk -- but FR-2a blocks the write and surfaces a reload prompt instead, since the freshly-derived target is the same (also missing) path", async () => {
+    // Recorded === freshly-derived script base, so hooksUpToDate() is
+    // trivially true by string comparison alone. Old code (no FR-2) would
+    // return true in total silence here. FR-2 must still notice the
+    // recorded script file itself is gone and attempt to react -- and
+    // because the freshly-derived target is the identical (missing) file,
+    // FR-2a's guard is what determines the final, safe outcome (reload
+    // prompt, no write) rather than an unbounded rewrite loop (Risk 5).
+    const context = makeContext(NEW_EXT_PATH);
+    const scriptBase = getHookScriptPath(context);
+    const settings = makeSettingsWithHooks(scriptBase);
+
+    // Sanity: hooksUpToDate() genuinely reports "up to date" for this
+    // fixture -- otherwise this test wouldn't be isolating FR-2 at all.
+    expect(hooksUpToDate(settings, scriptBase)).toBe(true);
+
+    mockNoLockContention(settings, (p) => (p.includes("0.2.0") ? false : undefined));
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    const { window } = await import("../test/mocks/vscode.js");
+    const showInfoSpy = vi.spyOn(window, "showInformationMessage");
+
+    const result = await ensureHooksInstalled(context);
+
+    expect(result).toBe(true);
+    expect(
+      settingsWrites(writeMock),
+      "FR-2a must block the write when the freshly-derived target is also missing"
+    ).toHaveLength(0);
+
+    const reloadCallArgs = showInfoSpy.mock.calls.find((args) =>
+      /reload/i.test(String(args[0]))
+    );
+    expect(
+      reloadCallArgs,
+      "FR-2 must have noticed the recorded path was missing and attempted to react, even though hooksUpToDate() alone reported everything was fine"
+    ).toBeDefined();
+  });
+});
+
+describe("ensureHooksInstalled — FR-2a: does not block a legitimate reconcile when the freshly-derived target exists", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
+  });
+
+  it("writes the reconciled paths when the recorded path is missing but the currently-running host's own path exists", async () => {
+    const oldContext = makeContext(OLD_EXT_PATH);
+    const newContext = makeContext(NEW_EXT_PATH);
+    const oldScriptBase = getHookScriptPath(oldContext);
+    const newScriptBase = getHookScriptPath(newContext);
+    const oldSettings = makeSettingsWithHooks(oldScriptBase);
+
+    expect(oldScriptBase).not.toBe(newScriptBase);
+
+    mockNoLockContention(oldSettings, (p) => {
+      if (p.includes("0.1.0")) return false; // recorded (OLD) path missing
+      if (p.includes("0.2.0")) return true; // freshly-derived (NEW) path healthy
+      return undefined;
+    });
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    const result = await ensureHooksInstalled(newContext);
+
+    expect(result).toBe(true);
+    expect(settingsWrites(writeMock).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("ensureHooksInstalled — FR-2a reload prompt dedup (Resolution 1)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
+  });
+
+  it("shows the reload-window prompt only once per session for a persistent stale-host signature", async () => {
+    // Uses a dedicated extension-path marker not reused by any other test in
+    // this file, so this test's dedup count can't be polluted by a reload
+    // prompt some other test already triggered against the module-level
+    // dedup Set earlier in the same test run.
+    const DEDUP_EXT_PATH =
+      process.platform === "win32"
+        ? "C:\\Users\\chris\\.vscode\\extensions\\conductor-dedup-signature-marker"
+        : "/c/Users/chris/.vscode/extensions/conductor-dedup-signature-marker";
+
+    const context = makeContext(DEDUP_EXT_PATH);
+    const scriptBase = getHookScriptPath(context);
+    const settings = makeSettingsWithHooks(scriptBase);
+
+    mockNoLockContention(settings, (p) =>
+      p.includes("conductor-dedup-signature-marker") ? false : undefined
+    );
+
+    const { window } = await import("../test/mocks/vscode.js");
+    const showInfoSpy = vi.spyOn(window, "showInformationMessage");
+
+    await ensureHooksInstalled(context);
+    await ensureHooksInstalled(context); // simulates a second FR-3-triggered retry, same broken state
+
+    const reloadCalls = showInfoSpy.mock.calls.filter((args) =>
+      /reload/i.test(String(args[0]))
+    );
+    expect(
+      reloadCalls,
+      "Resolution 1: a persistent stale-host signature must produce at most one reload prompt per session"
+    ).toHaveLength(1);
+  });
+});
+
+describe("ensureHooksInstalled — Risk 6: recorded-path extraction across quoting and platform forms", () => {
+  let realPlatform: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
+    realPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+  });
+
+  afterEach(() => {
+    if (realPlatform) {
+      Object.defineProperty(process, "platform", realPlatform);
+    }
+  });
+
+  it("correctly isolates the script segment when the Windows git-bash command has a quoted (spaced) script path", async () => {
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+
+    const staleContext = makeContext(
+      "C:\\Users\\Some User\\.vscode\\extensions\\conductor-risk6-quoted-stale"
+    );
+    const healthyContext = makeContext(
+      "C:\\Users\\chris\\.vscode\\extensions\\conductor-risk6-quoted-healthy"
+    );
+    const staleScriptBase = getHookScriptPath(staleContext);
+    const healthyScriptBase = getHookScriptPath(healthyContext);
+
+    // Sanity: this case is only meaningful if the recorded command actually
+    // ends up quoted (a space forces quoting per src/hookInstaller.ts's
+    // getHookScriptPath).
+    expect(staleScriptBase).toContain('"');
+    expect(staleScriptBase).not.toBe(healthyScriptBase);
+
+    const settings = makeSettingsWithHooks(staleScriptBase);
+    mockNoLockContention(settings, (p) =>
+      p.includes("conductor-risk6-quoted-stale")
+        ? false
+        : p.includes("conductor-risk6-quoted-healthy")
+          ? true
+          : undefined
+    );
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    const result = await ensureHooksInstalled(healthyContext);
+
+    expect(result).toBe(true);
+    expect(
+      settingsWrites(writeMock).length,
+      "extraction must correctly strip the surrounding quotes to find the real script path, not misparse the quoted, spaced segment"
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("correctly isolates the script segment when the Windows git-bash command is unquoted", async () => {
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+
+    // resolveNodeBinary()'s hardcoded last-resort default
+    // ("C:\Program Files\nodejs\node.exe") itself contains a space, which
+    // would quote the node segment regardless of the extensionPath under
+    // test -- route node resolution to the second, unspaced common-path
+    // candidate (nvm4w) throughout this whole test (including
+    // ensureHooksInstalled's own internal getHookScriptPath call), so only
+    // the script segment's quoting is under test here (mirrors this file's
+    // existing "does not quote the resolved node binary segment" case
+    // above). This test builds its own fs.existsSync implementation
+    // (rather than mockNoLockContention's generic default-true fallback)
+    // specifically so node-path resolution stays identical before and
+    // during the ensureHooksInstalled() call below.
+    const NVM4W_NODE_PATH = "C:\\nvm4w\\nodejs\\node.exe";
+    const STALE_MARKER = "conductor-risk6-unquoted-stale";
+    const HEALTHY_MARKER = "conductor-risk6-unquoted-healthy";
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) return false;
+      if (s.includes(STALE_MARKER)) return false;
+      if (s === NVM4W_NODE_PATH || s.includes(HEALTHY_MARKER)) return true;
+      return false; // in particular: the spaced "Program Files" node candidate
+    });
+
+    const staleContext = makeContext(
+      `C:\\Users\\chris\\.vscode\\extensions\\${STALE_MARKER}`
+    );
+    const healthyContext = makeContext(
+      `C:\\Users\\chris\\.vscode\\extensions\\${HEALTHY_MARKER}`
+    );
+    const staleScriptBase = getHookScriptPath(staleContext);
+    const healthyScriptBase = getHookScriptPath(healthyContext);
+
+    expect(staleScriptBase).not.toContain('"');
+    expect(staleScriptBase).not.toBe(healthyScriptBase);
+
+    const settings = makeSettingsWithHooks(staleScriptBase);
+    (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) {
+        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      }
+      return JSON.stringify(settings);
+    });
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    const result = await ensureHooksInstalled(healthyContext);
+
+    expect(result).toBe(true);
+    expect(settingsWrites(writeMock).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("correctly isolates the script segment when the command is POSIX form (`node /path/to/session-state.js action`)", async () => {
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+
+    const staleContext = makeContext("/home/dev/.vscode/extensions/conductor-risk6-posix-stale");
+    const healthyContext = makeContext(
+      "/home/dev/.vscode/extensions/conductor-risk6-posix-healthy"
+    );
+    const staleScriptBase = getHookScriptPath(staleContext);
+    const healthyScriptBase = getHookScriptPath(healthyContext);
+
+    expect(staleScriptBase.startsWith("node ")).toBe(true);
+    expect(staleScriptBase).not.toBe(healthyScriptBase);
+
+    const settings = makeSettingsWithHooks(staleScriptBase);
+    mockNoLockContention(settings, (p) =>
+      p.includes("conductor-risk6-posix-stale")
+        ? false
+        : p.includes("conductor-risk6-posix-healthy")
+          ? true
+          : undefined
+    );
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    const result = await ensureHooksInstalled(healthyContext);
+
+    expect(result).toBe(true);
+    expect(settingsWrites(writeMock).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("ensureHooksInstalled — FR-4: reconciliation is unaffected by SETUP_DECLINED_KEY", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
+  });
+
+  it("still reconciles stale paths even when the user previously declined hook setup", async () => {
+    const oldContext = makeContext(OLD_EXT_PATH);
+    const newContext = makeContext(NEW_EXT_PATH);
+    // "claudeConductor.hookSetupDeclined" -- src/hookInstaller.ts:L10's
+    // SETUP_DECLINED_KEY -- simulate a user who previously chose
+    // "Don't Ask Again".
+    (newContext.globalState.get as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+    const oldScriptBase = getHookScriptPath(oldContext);
+    const oldSettings = makeSettingsWithHooks(oldScriptBase);
+
+    mockNoLockContention(oldSettings);
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    const { window } = await import("../test/mocks/vscode.js");
+    const showInfoSpy = vi.spyOn(window, "showInformationMessage");
+
+    const result = await ensureHooksInstalled(newContext);
+
+    expect(result).toBe(true);
+    expect(settingsWrites(writeMock).length).toBeGreaterThanOrEqual(1);
+    // The already-installed branch must never consult the decline flag --
+    // src/hookInstaller.ts:L279-L280's existing comment already documents
+    // why, and FR-2/FR-2a/FR-6 must not change that.
+    expect(newContext.globalState.get).not.toHaveBeenCalledWith(
+      "claudeConductor.hookSetupDeclined"
+    );
+    // Nor must the "Allow / Not Now / Don't Ask Again" consent prompt appear.
+    const consentCallArgs = showInfoSpy.mock.calls.find((args) =>
+      String(args[0]).includes("requires adding hooks")
+    );
+    expect(consentCallArgs).toBeUndefined();
+  });
+});
+
+describe("ensureHooksInstalled — FR-5: in-flight guard against overlapping runs", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
+  });
+
+  it("does not perform the reconcile+write sequence twice when called again before the first call has resolved", async () => {
+    // Assumption (recorded in this test-implementer's return to the router):
+    // this test proves the guard via two back-to-back, unawaited calls
+    // (`const p1 = ensureHooksInstalled(...); const p2 = ensureHooksInstalled(...);`).
+    // This reliably detects a guard implemented as a held Promise (its
+    // .finally()/await-based reset is deferred by at least one microtask,
+    // so p2's synchronous entry check still sees the in-flight state) --
+    // Resolution 2 (§5) explicitly names this as one of the two sanctioned
+    // shapes ("a module-level boolean or a held Promise"). A guard
+    // implemented as a plain boolean reset synchronously within a
+    // zero-internal-await function body would not have a genuine overlap
+    // window for this test to observe in the first place, so there is
+    // nothing for such a guard to protect against in that specific shape.
+    const oldContext = makeContext(OLD_EXT_PATH);
+    const newContext = makeContext(NEW_EXT_PATH);
+    const oldScriptBase = getHookScriptPath(oldContext);
+    const oldSettings = makeSettingsWithHooks(oldScriptBase);
+
+    mockNoLockContention(oldSettings);
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    const p1 = ensureHooksInstalled(newContext);
+    const p2 = ensureHooksInstalled(newContext);
+    await Promise.all([p1, p2]);
+
+    expect(
+      settingsWrites(writeMock),
+      "FR-5: two overlapping calls within the same process must not each independently reconcile+write"
+    ).toHaveLength(1);
+  });
+});
+
+describe("ensureHooksInstalled — FR-6: lockfile guard around the settings.json read-modify-write", () => {
+  function eexist(): NodeJS.ErrnoException {
+    return Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST" });
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
+  });
+
+  it("fails fast without a user-facing error when the lock is already held and not yet stale, leaving settings.json untouched", async () => {
+    const oldContext = makeContext(OLD_EXT_PATH);
+    const newContext = makeContext(NEW_EXT_PATH);
+    const oldScriptBase = getHookScriptPath(oldContext);
+    const oldSettings = makeSettingsWithHooks(oldScriptBase);
+
+    (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) {
+        return JSON.stringify({ pid: 99999, timestamp: Date.now() });
+      }
+      return JSON.stringify(oldSettings);
+    });
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) return true; // a lock file is present
+      return true; // every hook script path itself is healthy -- isolate the lock as the only blocker
+    });
+    (fs.statSync as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      mtimeMs: Date.now(),
+      mtime: new Date(),
+    }));
+    const eexistErr = eexist();
+    // Support both plausible exclusive-create APIs -- whichever one the
+    // implementation actually calls will throw EEXIST for the lock path.
+    (fs.writeFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      if (String(p).endsWith(".lock")) throw eexistErr;
+    });
+    (fs.openSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      if (String(p).endsWith(".lock")) throw eexistErr;
+      return 0;
+    });
+
+    const { window } = await import("../test/mocks/vscode.js");
+    const showErrorSpy = vi.spyOn(window, "showErrorMessage");
+    const showInfoSpy = vi.spyOn(window, "showInformationMessage");
+
+    const result = await ensureHooksInstalled(newContext);
+
+    expect(result).toBe(true);
+    expect(
+      settingsWrites(fs.writeFileSync as ReturnType<typeof vi.fn>),
+      "a held, non-stale lock must skip the write for this cycle rather than blocking or erroring"
+    ).toHaveLength(0);
+    expect(showErrorSpy, "lock contention is expected multi-window behavior, not a defect").not.toHaveBeenCalled();
+    expect(showInfoSpy).not.toHaveBeenCalledWith(expect.stringMatching(/reload/i));
+  });
+
+  it("detects a stale lock, steals it, and proceeds with the reconcile+write", async () => {
+    const oldContext = makeContext(OLD_EXT_PATH);
+    const newContext = makeContext(NEW_EXT_PATH);
+    const oldScriptBase = getHookScriptPath(oldContext);
+    const oldSettings = makeSettingsWithHooks(oldScriptBase);
+    const staleTimestamp = Date.now() - 60_000; // well past a "few seconds" threshold
+
+    (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) {
+        return JSON.stringify({ pid: 12345, timestamp: staleTimestamp });
+      }
+      return JSON.stringify(oldSettings);
+    });
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) return true;
+      return true;
+    });
+    (fs.statSync as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      mtimeMs: staleTimestamp,
+      mtime: new Date(staleTimestamp),
+    }));
+
+    let lockWriteAttempts = 0;
+    const eexistErr = eexist();
+    (fs.writeFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      if (String(p).endsWith(".lock")) {
+        lockWriteAttempts += 1;
+        if (lockWriteAttempts === 1) throw eexistErr;
+      }
+    });
+    let lockOpenAttempts = 0;
+    (fs.openSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      if (String(p).endsWith(".lock")) {
+        lockOpenAttempts += 1;
+        if (lockOpenAttempts === 1) throw eexistErr;
+        return 0;
+      }
+      return 0;
+    });
+
+    const result = await ensureHooksInstalled(newContext);
+
+    expect(result).toBe(true);
+    // A settings write alone isn't sufficient proof here: the current
+    // (pre-FR-6) implementation has no lock awareness at all, so it would
+    // also produce exactly one settings write regardless of this fixture's
+    // "held lock" simulation -- that would make this test pass for the
+    // wrong reason. Require positive evidence that the lockfile was
+    // actually touched (an exclusive-create attempt against the ".lock"
+    // path) before trusting the write-count assertion below.
+    expect(
+      lockWriteAttempts + lockOpenAttempts,
+      "the implementation must actually attempt to exclusively-create the lockfile, not skip locking entirely"
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      settingsWrites(fs.writeFileSync as ReturnType<typeof vi.fn>),
+      "a stale lock must be stolen (not left blocking forever) so the RMW proceeds exactly once"
+    ).toHaveLength(1);
+  });
+
+  it("acquires and releases the lock around a successful RMW cycle", async () => {
+    const oldContext = makeContext(OLD_EXT_PATH);
+    const newContext = makeContext(NEW_EXT_PATH);
+    const oldScriptBase = getHookScriptPath(oldContext);
+    const oldSettings = makeSettingsWithHooks(oldScriptBase);
+
+    (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) {
+        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      }
+      return JSON.stringify(oldSettings);
+    });
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) return false; // no lock currently held
+      return true;
+    });
+    (fs.writeFileSync as ReturnType<typeof vi.fn>).mockImplementation(() => {});
+    (fs.openSync as ReturnType<typeof vi.fn>).mockImplementation(() => 0);
+
+    const result = await ensureHooksInstalled(newContext);
+
+    expect(result).toBe(true);
+    expect(settingsWrites(fs.writeFileSync as ReturnType<typeof vi.fn>)).toHaveLength(1);
+
+    const releaseCalled =
+      (fs.unlinkSync as ReturnType<typeof vi.fn>).mock.calls.some((c) =>
+        String(c[0]).endsWith(".lock")
+      ) ||
+      (fs.rmSync as ReturnType<typeof vi.fn>).mock.calls.some((c) =>
+        String(c[0]).endsWith(".lock")
+      );
+    expect(
+      releaseCalled,
+      "the lock must be removed once the RMW sequence completes (via unlinkSync or rmSync)"
+    ).toBe(true);
+  });
+
+  it("leaves settings.json untouched on a failed acquisition, then succeeds on a later retry once the lock is free (FR-3 retry)", async () => {
+    const oldContext = makeContext(OLD_EXT_PATH);
+    const newContext = makeContext(NEW_EXT_PATH);
+    const oldScriptBase = getHookScriptPath(oldContext);
+    const oldSettings = makeSettingsWithHooks(oldScriptBase);
+
+    let lockHeld = true;
+    (fs.readFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) {
+        if (!lockHeld) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        return JSON.stringify({ pid: 99999, timestamp: Date.now() });
+      }
+      return JSON.stringify(oldSettings);
+    });
+    (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const s = String(p);
+      if (s.endsWith(".lock")) return lockHeld;
+      return true;
+    });
+    (fs.statSync as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      mtimeMs: Date.now(),
+      mtime: new Date(),
+    }));
+    const eexistErr = eexist();
+    (fs.writeFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      if (String(p).endsWith(".lock") && lockHeld) throw eexistErr;
+    });
+    (fs.openSync as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      if (String(p).endsWith(".lock") && lockHeld) throw eexistErr;
+      return 0;
+    });
+
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    // First cycle: lock is held by another (live) process -- skip the write.
+    const firstResult = await ensureHooksInstalled(newContext);
+    expect(firstResult).toBe(true);
+    expect(settingsWrites(writeMock)).toHaveLength(0);
+
+    // Simulate the other window releasing the lock before FR-3's next
+    // window-focus-triggered retry.
+    lockHeld = false;
+
+    const secondResult = await ensureHooksInstalled(newContext);
+    expect(secondResult).toBe(true);
+    expect(
+      settingsWrites(writeMock),
+      "once the lock is free, a subsequent retry (e.g. FR-3's focus-triggered re-check) must succeed"
+    ).toHaveLength(1);
   });
 });

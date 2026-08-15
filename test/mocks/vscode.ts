@@ -226,6 +226,13 @@ export const window = {
   onDidOpenTerminal: vi.fn().mockReturnValue(new Disposable(() => {})),
   onDidCloseTerminal: vi.fn().mockReturnValue(new Disposable(() => {})),
   onDidChangeTerminalShellIntegration: vi.fn().mockReturnValue(new Disposable(() => {})),
+  // Issue #128 (hook self-heal): activate() registers a listener here to
+  // retry the hook self-heal check on the window's false->true focus edge.
+  // Tests capture the registered listener via this mock's .mock.calls and
+  // invoke it directly with a { focused: boolean } payload — there is no
+  // real event-firing plumbing here, matching this file's existing style
+  // for onDidOpenTerminal/onDidCloseTerminal above.
+  onDidChangeWindowState: vi.fn().mockReturnValue(new Disposable(() => {})),
 
   createOutputChannel: vi.fn().mockImplementation(() => new OutputChannelStub()),
 
