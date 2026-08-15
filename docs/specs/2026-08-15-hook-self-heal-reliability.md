@@ -108,30 +108,46 @@ that output channel — no more silent unhandled rejection. This does not
 change the return value or control flow of `ensureHooksInstalled` itself,
 only how its caller handles success and failure.
 
-**FR-2 — path-existence check as an independent self-heal trigger.**
-`ensureHooksInstalled`'s reconciliation branch (`src/hookInstaller.ts:L276-L288`)
-must reconcile whenever the hook script file referenced by the installed
-commands does not exist on disk, independent of what `hooksUpToDate()`'s
-version-string comparison reports. Concretely: after confirming
-`hooksInstalled(settings)` is true, resolve the **native filesystem path**
-of the current hook script and check it with `fs.existsSync()`; if that
-check fails, treat it identically to `hooksUpToDate() === false` (call
-`reconcileHookPaths()` + `writeSettings()`, subject to FR-2a's guard below).
-This needs a new export distinct from the existing `getHookScriptPath()`
-(`src/hookInstaller.ts:L59-L80`): that function returns the **composed shell
-command string** (on Windows, git-bash-converted — `toGitBashPath()` at
-`src/hookInstaller.ts:L63-L68` turns `C:\Users\...` into `/c/Users/...`, which
-`fs.existsSync` cannot resolve on Windows), not the raw `hookPath` computed
-internally at `src/hookInstaller.ts:L60`. Expose that raw, native-OS path
-separately (e.g. a second exported function, or a return-shape change) so
-FR-2's existence check has something `fs.existsSync` can actually use.
+**FR-2 — path-existence check on the *recorded* path, as an independent
+self-heal trigger.** `ensureHooksInstalled`'s reconciliation branch
+(`src/hookInstaller.ts:L276-L288`) must reconcile whenever the hook script
+path **already recorded** in `settings.json`'s installed hook commands does
+not exist on disk — independent of, and in addition to, whatever
+`hooksUpToDate()`'s version-string comparison reports. This is deliberately
+the *recorded* path, not the path freshly derived from the
+currently-running host (that check is FR-2a, immediately below, and serves
+a different purpose): `#128`'s actual symptom is a recorded path that is
+stale while the currently-running host's own path is healthy, and only a
+check against the recorded path can catch that case independent of
+`hooksUpToDate()` — the mechanism that already failed to catch it once.
+
+Concretely: after confirming `hooksInstalled(settings)` is true, for each
+installed hook command containing `HOOK_MARKER`
+(`src/hookInstaller.ts:L9`, `"session-state.js"` — the same marker
+`hooksInstalled()` and `hooksUpToDate()` already key on), extract the
+script-path segment of that command string and check it with
+`fs.existsSync()`. Extraction is not free: the stored command is
+`<node-segment> <script-segment> <action>` (`src/hookInstaller.ts:L206`,
+`${scriptBase} ${action}`), each segment optionally double-quoted if it
+contains spaces (`src/hookInstaller.ts:L70-L76`), and on Windows both
+segments are git-bash-style (`/c/Users/...`, from `toGitBashPath()` at
+`src/hookInstaller.ts:L63-L68`), not native Windows paths `fs.existsSync`
+can resolve directly. The extraction must therefore: locate the token
+containing the `HOOK_MARKER` substring (robust to node-segment-vs-script-segment
+ordering, unlike assuming a fixed position), strip surrounding quotes, and
+— on Windows — reverse `toGitBashPath()`'s conversion (`/c/...` →
+`C:\...`) before calling `fs.existsSync()`. If that check fails, treat it
+identically to `hooksUpToDate() === false`: call `reconcileHookPaths()` +
+`writeSettings()`, subject to FR-2a's guard below.
 
 **FR-2a — do not write from a stale host; prompt for reload instead.**
-Before FR-2's `reconcileHookPaths()` + `writeSettings()` runs — whether
-triggered by `hooksUpToDate() === false` or by FR-2's own existence
-check — verify that the **newly-resolved** target path (the one about to
-be written into `settings.json`) itself exists via `fs.existsSync()`. If it
-does not, the running extension host is itself stale: its own
+Before either trigger's `reconcileHookPaths()` + `writeSettings()` runs —
+whether triggered by `hooksUpToDate() === false` or by FR-2's
+recorded-path check — verify that the **newly-resolved** target path (the
+one about to be written into `settings.json`, freshly derived from the
+*currently-running* host via `getHookScriptPath()`, not the recorded path
+FR-2 checks) itself exists via `fs.existsSync()`. If it does not, the
+running extension host is itself stale: its own
 `context.extensionPath`, which `getHookScriptPath()`
 (`src/hookInstaller.ts:L59-L80`) derives the target path from, points at a
 directory VS Code has already deleted. This is exactly the scenario `#128`
@@ -142,12 +158,16 @@ code-only"). In that case, do not write: log via `log()`
 (`src/output.ts:L17-L20`) and surface a `vscode.window.showInformationMessage`
 telling the user to reload the window, rather than writing a target path
 that is equally broken. **This guard is load-bearing, not optional:**
-without it, FR-2's existence check and FR-3's window-focus retry combine
-into an unbounded write loop against `~/.claude/settings.json` — on every
-focus event, the existence check re-detects the same missing file,
-re-resolves the same stale `extensionPath`, and rewrites the identical
-broken path, against the exact file Risk 3 already names as
-contention-prone. FR-2a is what makes FR-2 safe to pair with FR-3.
+without it, a genuinely stale recorded path (correctly caught by FR-2) on
+a host whose own `context.extensionPath` is *also* stale would still be
+"fixed" by writing `getHookScriptPath()`'s equally-broken result — and
+FR-3's window-focus retry would repeat that same detect-and-rewrite cycle
+on every subsequent focus event, since the newly-written path is itself
+missing and FR-2 would flag it again next time. The result is an unbounded
+write loop against `~/.claude/settings.json` — the exact file Risk 3
+already names as contention-prone — silently rewriting the identical
+broken value over and over instead of converging. FR-2a is what makes
+FR-2 and FR-3 safe to ship together.
 
 **FR-3 — retry on window focus, not just on `activate()`.** In addition to
 the existing single 3-second-after-`activate()` check
@@ -164,7 +184,7 @@ focused," and `WindowState.focused` is documented "Whether the current
 window is focused." (`readonly focused: boolean`). This listener must be
 pushed onto `context.subscriptions` for cleanup, matching every other
 disposable registration already in `activate()` (e.g.
-`src/extension.ts:L120-L124`, `:L135`). The check must be naturally
+`src/extension.ts:L120-L124`, `src/extension.ts:L135`). The check must be naturally
 retriable — no "already attempted, don't try again" latch is introduced —
 so a transient failure (a concurrent-write race, a momentary file lock) on
 one focus event gets retried on a later one instead of persisting until
@@ -200,17 +220,19 @@ this does not solve.
   call (FR-1), the new `onDidChangeWindowState` listener (FR-3), and
   routing failures through the existing output channel and
   `showErrorMessage`.
-- `src/hookInstaller.ts`: the native hook-script-path export and
-  `fs.existsSync` check (FR-2), the stale-host write guard (FR-2a), the
-  branch merge with the existing `hooksUpToDate()` check, and the in-flight
-  guard (FR-5).
+- `src/hookInstaller.ts`: the recorded-hook-command-path extraction and
+  `fs.existsSync` check (FR-2), the freshly-derived-target `fs.existsSync`
+  stale-host write guard (FR-2a), the branch merge with the existing
+  `hooksUpToDate()` check, and the in-flight guard (FR-5).
 - Tests for: the awaited/caught failure path surfacing an error (FR-1), the
-  path-existence trigger firing reconciliation independent of a
-  version-string match (FR-2), the stale-host guard refusing to write and
-  surfacing the reload prompt instead of looping (FR-2a), the window-focus
-  listener re-invoking the check and being registered as a disposable
-  (FR-3), the consent-flow no-regression guarantee (FR-4), and the
-  in-flight guard preventing a double-run (FR-5).
+  recorded-path extraction correctly isolating the script segment across
+  quoted/unquoted, Windows git-bash-converted, and POSIX command forms and
+  then firing reconciliation independent of a version-string match (FR-2),
+  the stale-host guard refusing to write and surfacing the reload prompt
+  instead of looping when the freshly-derived target is also missing
+  (FR-2a), the window-focus listener re-invoking the check and being
+  registered as a disposable (FR-3), the consent-flow no-regression
+  guarantee (FR-4), and the in-flight guard preventing a double-run (FR-5).
 - `README.md:L120` — update to describe the version-string trigger, the
   path-existence/window-focus triggers, and the stale-host reload prompt,
   so the documented behavior matches what actually runs.
@@ -233,12 +255,14 @@ own risk analysis):
 ## 4. Risks
 
 **Risk 1 — `getHookScriptPath()` conflates the shell-command string with
-the native path.** FR-2 depends on a path `fs.existsSync` can resolve;
+the native path.** FR-2a depends on a path `fs.existsSync` can resolve;
 `getHookScriptPath()` (`src/hookInstaller.ts:L59-L80`) currently returns
-only the composed, git-bash-converted command string on Windows.
-**Mitigation:** FR-2 explicitly requires exposing the raw `hookPath`
-(`src/hookInstaller.ts:L60`) separately, verified by reading the function
-before writing this requirement rather than assumed.
+only the composed, git-bash-converted command string on Windows, not a bare
+native filesystem path. **Mitigation:** FR-2a explicitly requires deriving
+a native-OS path from that command string (or exposing the raw `hookPath`,
+`src/hookInstaller.ts:L60`, separately) before calling `fs.existsSync()`,
+verified by reading the function before writing this requirement rather
+than assumed.
 
 **Risk 2 — window-focus events can fire in rapid bursts** (alt-tabbing,
 multi-monitor setups moving focus quickly). Without FR-5's guard, this
@@ -266,18 +290,35 @@ FR-1's `showErrorMessage` could fire on every focus event FR-3 triggers,
 which is intrusive rather than helpful. **Mitigation:** deferred to Open
 Question 1 — not resolved by this spec.
 
-**Risk 5 — FR-2 combined with FR-3, without a guard, is an unbounded write
-loop.** Caught during review of this document rather than left for
-implementation to discover: `getHookScriptPath()` derives its result from
-`context.extensionPath` (`src/hookInstaller.ts:L59-L60`), which is the
-*currently running* host's directory — exactly the directory `#128`'s
-scenario shows can already be deleted. Without a check on the
-newly-resolved path itself, FR-2's existence check would report "missing"
-forever on a stale host, and FR-3's retry would re-fire that same
-false-negative reconciliation on every window-focus event, indefinitely,
-against the file already flagged in Risk 3 as write-contention-prone.
-**Mitigation:** FR-2a, added specifically to close this — it is not
-optional and is required for FR-2 and FR-3 to be shipped together.
+**Risk 5 — FR-2 combined with FR-3, without FR-2a's guard, is an unbounded
+write loop.** Caught while drafting this document (see the Verification
+note for the durable reference), not left for implementation to discover:
+if FR-2 correctly detects a stale *recorded* path, but the host's own
+`context.extensionPath` (`src/hookInstaller.ts:L59-L60`) is *also* stale —
+exactly the directory `#128`'s scenario shows can already be deleted —
+reconciling would write that equally-broken freshly-derived path right
+back into `settings.json`. FR-3's retry would then re-fire the same
+detect-and-rewrite cycle on every subsequent window-focus event,
+indefinitely, against the file already flagged in Risk 3 as
+write-contention-prone. **Mitigation:** FR-2a, added specifically to close
+this by checking the freshly-derived target *before* writing it — it is
+not optional and is required for FR-2 and FR-3 to be shipped together.
+
+**Risk 6 — recorded-path extraction is fragile across quoting and
+git-bash conversion.** FR-2's extraction (locate the `HOOK_MARKER` token,
+strip quotes, reverse `toGitBashPath()` on Windows) has no existing
+precedent in this file to copy wholesale — `reconcileHookPaths()`'s
+`lastIndexOf(" ")` split (`src/hookInstaller.ts:L178-L180`) only isolates
+the trailing action argument, not the script segment itself, and a
+git-bash path containing a space (e.g. `/c/Users/chris test/...`) inside a
+quoted segment is exactly the kind of input this naive-split approach can
+misparse. A bug here would make FR-2 report false positives (spuriously
+"missing," triggering needless reconciles) or false negatives (missing a
+genuinely stale recorded path, silently reducing FR-2 back to no-op).
+**Mitigation:** the §3 test list requires coverage across quoted/unquoted,
+Windows git-bash-converted, and POSIX command forms specifically because of
+this risk; the implementation step should not treat extraction as
+incidental plumbing.
 
 ## 5. Open questions
 
@@ -325,10 +366,16 @@ attempt to fetch the rendered API-reference page
 truncated excerpt that did not include the `WindowState.focused`
 description — the raw type-declaration source was used instead precisely
 because it doesn't truncate the way the rendered page's summarizer did.
-Risk 5 / FR-2a's write-loop scenario was identified during review of an
-earlier draft of this document, not found independently by the author
-before that; it is recorded here as a confirmed defect in the *requirement
-as originally written*, not as a defect in the shipped code, since no code
-has been written against this spec yet. No repo tooling was unavailable;
-`gh`, `git`, `Read`, `Grep`, `Bash` (`curl`), and `WebFetch` were sufficient
-for every claim above.
+Risk 5 / FR-2a's write-loop scenario, and this document's subsequent
+FR-2-checks-the-recorded-path / FR-2a-checks-the-freshly-derived-path
+split, are recorded in this branch's own commit history —
+`git -C I:/ai/claude/vscode-claude-conductor log --oneline
+docs-128-hook-self-heal` shows the commit that introduced FR-2a
+(`8ea3d5c`, "docs: close FR-2/FR-3 write-loop gap, fix citation format,
+verify WindowState.focused") followed by the commit that split FR-2 and
+FR-2a onto distinct paths — both durable, checkable references, not
+review commentary this document merely asserts. This is recorded as a
+defect in the *requirement text as originally drafted*, not in shipped
+code, since no code has been written against this spec yet. No repo
+tooling was unavailable; `gh`, `git`, `Read`, `Grep`, `Bash` (`curl`), and
+`WebFetch` were sufficient for every claim above.
