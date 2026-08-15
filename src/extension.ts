@@ -15,6 +15,10 @@ import { log } from "./output";
 let sessionManager: SessionManager;
 const notifiedErrorSignatures = new Set<string>();
 
+/**
+ * Runs hook self-healing with contained errors, output logging, and a
+ * de-duplicated user-facing failure notification.
+ */
 async function runHookSelfHealCheck(context: vscode.ExtensionContext): Promise<void> {
   try {
     await ensureHooksInstalled(context);
@@ -158,6 +162,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }, 3000);
 
   let lastFocused = false;
+  // Re-run self-healing when focus returns so a lock-contended cycle can retry.
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((state) => {
       const wasFocused = lastFocused;

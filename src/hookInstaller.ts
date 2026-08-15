@@ -54,6 +54,11 @@ export function resolveNodeBinary(deps?: {
   return isWin32 ? "C:\\Program Files\\nodejs\\node.exe" : "node";
 }
 
+/** Returns the absolute filesystem path to the bundled hook script. */
+function getHookScriptFilePath(context: vscode.ExtensionContext): string {
+  return path.join(context.extensionPath, "hooks", HOOK_MARKER);
+}
+
 /**
  * Get the path to our hook script, using Unix-style paths for git bash compatibility.
  * Claude Code on Windows uses git bash paths like /c/Users/...
@@ -62,7 +67,7 @@ export function resolveNodeBinary(deps?: {
  * OS-specific command strings.
  */
 export function getHookScriptPath(context: vscode.ExtensionContext): string {
-  const hookPath = path.join(context.extensionPath, "hooks", "session-state.js");
+  const hookPath = getHookScriptFilePath(context);
 
   if (process.platform === "win32") {
     const toGitBashPath = (windowsPath: string): string => {
@@ -161,6 +166,7 @@ function getRecordedHookScriptPath(
   return undefined;
 }
 
+/** Returns whether an installed hook records a script path that no longer exists. */
 function recordedHookScriptIsMissing(settings: Record<string, unknown>): boolean {
   const recordedPath = getRecordedHookScriptPath(settings);
   return recordedPath === undefined ? false : !fs.existsSync(recordedPath);
@@ -189,8 +195,17 @@ function acquireReconcileLock(): boolean {
       typeof existing.timestamp === "number" &&
       Date.now() - existing.timestamp > STALE_LOCK_THRESHOLD_MS
     ) {
-      fs.writeFileSync(LOCK_PATH, lockContents(), "utf8");
-      return true;
+      try {
+        fs.unlinkSync(LOCK_PATH);
+      } catch {
+        // Another process removed it first; the create below decides the winner.
+      }
+      try {
+        fs.writeFileSync(LOCK_PATH, lockContents(), { flag: "wx" });
+        return true;
+      } catch {
+        // Another process won the steal; treat this cycle as contended.
+      }
     }
   } catch {
     // An unreadable lock is treated as live contention for this cycle.
@@ -204,6 +219,7 @@ function acquireReconcileLock(): boolean {
   return false;
 }
 
+/** Releases the reconciliation lock on a best-effort basis. */
 function releaseReconcileLock(): void {
   try {
     fs.unlinkSync(LOCK_PATH);
@@ -381,11 +397,7 @@ async function doEnsureHooksInstalled(
     if (needsReconcile) {
       // Paths are stale (extension updated to a new directory). Silently
       // reconcile — consent was already granted at initial install.
-      const hostHookPath = path.join(
-        context.extensionPath,
-        "hooks",
-        "session-state.js"
-      );
+      const hostHookPath = getHookScriptFilePath(context);
       if (!fs.existsSync(hostHookPath)) {
         try {
           log(
@@ -457,6 +469,10 @@ async function doEnsureHooksInstalled(
   return false;
 }
 
+/**
+ * Ensures hooks are installed and current, coalescing concurrent callers onto
+ * the same module-level in-flight reconciliation run.
+ */
 export function ensureHooksInstalled(
   context: vscode.ExtensionContext
 ): Promise<boolean> {
