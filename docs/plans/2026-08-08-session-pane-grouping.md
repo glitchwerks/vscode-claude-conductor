@@ -194,7 +194,7 @@ That one rule subsumes three things that would otherwise be separate mechanisms:
 
 Confirmed via issue #110 (https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5300114215, 2026-08-15) — see that comment for the full rationale chain (why P4/P5's "empirical validation" note refers to D4's own gating probes P1/P3, not a separate untested claim about `Beside` itself).
 
-### D3 — What happens when the tracked group disappears? ⚠️ **Confirmation needed**
+### D3 — What happens when the tracked group disappears? ✅ **Confirmed 2026-08-15**
 
 **Options:** (a) subscribe to `onDidChangeTabGroups` and invalidate on close; (b) validate lazily at launch time; (c) persist the column across sessions in `globalState`.
 
@@ -205,6 +205,8 @@ Confirmed via issue #110 (https://github.com/glitchwerks/vscode-claude-conductor
 - (c) rejected: a column number is meaningless across window layouts, and persisting it recreates the "stale index" failure shape that `_pidToTerminal` and #68 already demonstrate.
 
 Behaviour on invalidation: fall through to D1 tier b, then to D2. Same code path as a cold start.
+
+Confirmed via issue #110 (https://github.com/glitchwerks/vscode-claude-conductor/issues/110#issuecomment-5302105363, 2026-08-15) — see that comment for the full options table and the rationale for why lazy validation, not the eager `onDidChangeTabGroups` subscription, is the mechanism.
 
 ### D4 — Replace the create-then-`moveToEditor` two-step, or layer on top of it? ⚠️ **Confirmation needed** — **the structural decision in this document**
 
