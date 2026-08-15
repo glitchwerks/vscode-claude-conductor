@@ -173,15 +173,18 @@ FR-2 and FR-3 safe to ship together.
 the existing single 3-second-after-`activate()` check
 (`src/extension.ts:L139-L141`), register a
 `vscode.window.onDidChangeWindowState` listener in `activate()` that
-re-runs the same FR-1/FR-2a-wrapped self-heal check whenever
-`state.focused` becomes `true`. Both the event and the field are confirmed
-in VS Code's own type declarations
+re-runs the same FR-1/FR-2a-wrapped self-heal check on the **false→true
+transition** of `state.focused` — not on every firing of the event. Per
+VS Code's own type declarations
 (https://raw.githubusercontent.com/microsoft/vscode/main/src/vscode-dts/vscode.d.ts,
-fetched 2026-08-15): `onDidChangeWindowState` is documented "An
-{@link Event} which fires when the focus or activity state of the current
-window changes. The value of the event represents whether the window is
-focused," and `WindowState.focused` is documented "Whether the current
-window is focused." (`readonly focused: boolean`). This listener must be
+fetched 2026-08-15), `onDidChangeWindowState` is documented "An
+{@link Event} which fires when the focus **or activity** state of the
+current window changes" — so it also fires while `focused` is already
+`true` (an activity-only change) — and `WindowState.focused` is documented
+"Whether the current window is focused." (`readonly focused: boolean`).
+The handler must therefore compare the incoming `state.focused` against
+the previously-observed value and only re-run the check on a genuine
+false→true edge, not on every event firing. This listener must be
 pushed onto `context.subscriptions` for cleanup, matching every other
 disposable registration already in `activate()` (e.g.
 `src/extension.ts:L120-L124`, `src/extension.ts:L135`). The check must be naturally
@@ -233,9 +236,14 @@ this does not solve.
   (FR-2a), the window-focus listener re-invoking the check and being
   registered as a disposable (FR-3), the consent-flow no-regression
   guarantee (FR-4), and the in-flight guard preventing a double-run (FR-5).
-- `README.md:L120` — update to describe the version-string trigger, the
-  path-existence/window-focus triggers, and the stale-host reload prompt,
-  so the documented behavior matches what actually runs.
+- `README.md` § How Idle Detection Works (verified present at
+  `README.md:L108`, covering `README.md:L110-L122` — the hook table, state
+  files, the self-heal paragraph, and removal instructions) — update to
+  describe the version-string trigger, the path-existence/window-focus
+  triggers, and the stale-host reload prompt, so the documented behavior
+  matches what actually runs. A heading anchor rather than a line number
+  because this document schedules exactly that section for an edit that
+  shifts its line count.
 - `CHANGELOG.md` — an `## [Unreleased]` entry.
 
 **Out of scope** (per `#128`, open, fetched 2026-08-15, and this document's
@@ -368,14 +376,14 @@ description — the raw type-declaration source was used instead precisely
 because it doesn't truncate the way the rendered page's summarizer did.
 Risk 5 / FR-2a's write-loop scenario, and this document's subsequent
 FR-2-checks-the-recorded-path / FR-2a-checks-the-freshly-derived-path
-split, are recorded in this branch's own commit history —
-`git -C I:/ai/claude/vscode-claude-conductor log --oneline
-docs-128-hook-self-heal` shows the commit that introduced FR-2a
-(`8ea3d5c`, "docs: close FR-2/FR-3 write-loop gap, fix citation format,
-verify WindowState.focused") followed by the commit that split FR-2 and
-FR-2a onto distinct paths — both durable, checkable references, not
-review commentary this document merely asserts. This is recorded as a
-defect in the *requirement text as originally drafted*, not in shipped
-code, since no code has been written against this spec yet. No repo
-tooling was unavailable; `gh`, `git`, `Read`, `Grep`, `Bash` (`curl`), and
-`WebFetch` were sufficient for every claim above.
+split, are recorded in this branch's (`docs-128-hook-self-heal`) own
+commit history — both durable, checkable references, not review
+commentary this document merely asserts: commit `8ea3d5c` ("docs: close
+FR-2/FR-3 write-loop gap, fix citation format, verify WindowState.focused")
+introduced FR-2a, and commit `fa050a5` ("docs: split FR-2 (recorded-path
+check) from FR-2a (write guard)") is where FR-2 and FR-2a were separated
+onto the recorded-path/freshly-derived-path distinction this revision
+uses. This is recorded as a defect in the *requirement text as originally
+drafted*, not in shipped code, since no code has been written against this
+spec yet. No repo tooling was unavailable; `gh`, `git`, `Read`, `Grep`,
+`Bash` (`curl`), and `WebFetch` were sufficient for every claim above.
