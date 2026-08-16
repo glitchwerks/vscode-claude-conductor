@@ -3,3 +3,6 @@ out/
 *.vsix
 .worktrees/
 .claude/settings.local.json
+
+# Agent scratch files (per standards/scratch-files.md)
+.tmp/
