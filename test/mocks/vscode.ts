@@ -139,6 +139,54 @@ export enum FileType {
   SymbolicLink = 64,
 }
 
+// mirrors node_modules/@types/vscode/index.d.ts:L7343-L7392
+export enum ViewColumn {
+  Active = -1,
+  Beside = -2,
+  One = 1,
+  Two = 2,
+  Three = 3,
+  Four = 4,
+  Five = 5,
+  Six = 6,
+  Seven = 7,
+  Eight = 8,
+  Nine = 9,
+}
+
+// ---------------------------------------------------------------------------
+// Tabs / tab groups (session-tab-default-grouping, #127)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bare marker class — mirrors the real `TabInputTerminal`
+ * (node_modules/@types/vscode/index.d.ts:L19282-L19287), which has a
+ * zero-argument constructor and no fields. `instanceof` against this class
+ * is the narrowing half of `_isConductorTab` (spec § 2.4.2).
+ */
+export class TabInputTerminal {
+  constructor() {}
+}
+
+/** Mirrors the field set of the real `Tab` (index.d.ts:L19294-L19332). */
+export interface Tab {
+  label: string;
+  group: TabGroup;
+  input: unknown;
+  isActive: boolean;
+  isDirty: boolean;
+  isPinned: boolean;
+  isPreview: boolean;
+}
+
+/** Mirrors the field set of the real `TabGroup` (index.d.ts:L19375-L19404). */
+export interface TabGroup {
+  isActive: boolean;
+  viewColumn: number;
+  activeTab: Tab | undefined;
+  tabs: Tab[];
+}
+
 // ---------------------------------------------------------------------------
 // RelativePattern
 // ---------------------------------------------------------------------------
@@ -213,7 +261,10 @@ export const window = {
   terminals: [] as unknown[],
   activeTerminal: undefined as unknown,
 
-  createTerminal: vi.fn().mockReturnValue({
+  // A distinct stub per call (rather than a fixed mockReturnValue) so two
+  // launches in the same test are distinguishable in assertions — required
+  // by the session-tab-default-grouping mock work (spec § 5.1 item 4).
+  createTerminal: vi.fn().mockImplementation(() => ({
     name: "mock-terminal",
     show: vi.fn(),
     sendText: vi.fn(),
@@ -221,7 +272,19 @@ export const window = {
     processId: Promise.resolve(undefined),
     shellIntegration: undefined,
     creationOptions: {},
-  }),
+  })),
+
+  // Live editor tab-group model (session-tab-default-grouping, #127). `all`
+  // is a plain mutable array — tests assign it directly to seed a topology
+  // (spec § 5.1 item 3); neither event is driven, since Rev 3's mechanism
+  // subscribes to neither (§ 2.4.5).
+  tabGroups: {
+    all: [] as TabGroup[],
+    activeTabGroup: undefined as TabGroup | undefined,
+    onDidChangeTabGroups: vi.fn().mockReturnValue(new Disposable(() => {})),
+    onDidChangeTabs: vi.fn().mockReturnValue(new Disposable(() => {})),
+    close: vi.fn(),
+  },
 
   onDidOpenTerminal: vi.fn().mockReturnValue(new Disposable(() => {})),
   onDidCloseTerminal: vi.fn().mockReturnValue(new Disposable(() => {})),
@@ -250,6 +313,17 @@ export const window = {
   createTreeView: vi.fn().mockImplementation(() => new TreeViewStub()),
   showOpenDialog: vi.fn().mockResolvedValue(undefined),
 };
+
+/**
+ * Reset `window.tabGroups.all` between tests, mirroring the existing
+ * `vscodeMock.window.terminals.length = 0` reset pattern
+ * (test/sessionManager.closeDetection.test.ts:L23) for this module-level
+ * singleton (spec § 5.1 item 6).
+ */
+export function resetTabGroups(): void {
+  window.tabGroups.all = [];
+  window.tabGroups.activeTabGroup = undefined;
+}
 
 // ---------------------------------------------------------------------------
 // workspace namespace

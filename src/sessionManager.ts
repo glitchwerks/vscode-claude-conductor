@@ -41,10 +41,10 @@ export class SessionManager implements vscode.Disposable {
 
   /**
    * Secondary index: processId → terminal map entry key.
-   * When moveToEditor causes VS Code to swap terminal references, the new
-   * onDidCloseTerminal fires with a reference that isn't in _sessions by
-   * identity. Storing the PID lets us fall back to a pid-based lookup when
-   * both the identity check and the name-match fail.
+   * Retained as a safety net when onDidCloseTerminal supplies a reference
+   * that isn't in _sessions by identity. The original moveToEditor reference-
+   * swap trigger is gone from the launch path; removing this index remains a
+   * separate, evidence-gated decision tracked by #68.
    */
   private readonly _pidToTerminal = new Map<number, vscode.Terminal>();
 
@@ -117,23 +117,57 @@ export class SessionManager implements vscode.Disposable {
     }
 
     const folderName = path.basename(normalized);
+    const targetColumn = this._resolveTargetColumn();
     const terminal = vscode.window.createTerminal({
       name: `${SESSION_NAME_PREFIX}${folderName}`,
       cwd: isLikelyNetworkPath(folderPath) ? folderPath : normalized,
       iconPath: new vscode.ThemeIcon("sparkle"),
       color: new vscode.ThemeColor("terminal.ansiGreen"),
+      location: { viewColumn: targetColumn ?? vscode.ViewColumn.Beside, preserveFocus: true },
     });
-
-    // Show the terminal first (required before moving to editor)
-    terminal.show(true);
-
-    // Move terminal from panel to editor tab area
-    await vscode.commands.executeCommand("workbench.action.terminal.moveToEditor");
 
     // Dispatch the claude command only after the shell prompt is ready
     await this._dispatchClaudeCommand(terminal);
 
     return { ok: true, reused: false };
+  }
+
+  /**
+   * Best-effort placement (FR1/FR3): the editor group holding the most
+   * Conductor-labelled tabs. Ties resolve to the lowest viewColumn so that
+   * repeated launches against an unchanged topology are deterministic.
+   * Returns undefined when no group holds any — the caller requests Beside.
+   */
+  private _resolveTargetColumn(): vscode.ViewColumn | undefined {
+    let bestColumn: vscode.ViewColumn | undefined;
+    let bestCount = 0;
+
+    for (const group of vscode.window.tabGroups.all) {
+      let count = 0;
+      for (const tab of group.tabs) {
+        if (this._isConductorTab(tab)) count++;
+      }
+      if (count === 0) continue;
+      if (bestColumn === undefined
+          || count > bestCount
+          || (count === bestCount && group.viewColumn < bestColumn)) {
+        bestCount = count;
+        bestColumn = group.viewColumn;
+      }
+    }
+
+    debugLog(`[group:resolve] column=${bestColumn ?? "beside"} count=${bestCount} groups=${vscode.window.tabGroups.all.length}`);
+    return bestColumn;
+  }
+
+  /**
+   * Heuristic (§ 2.3): a tab is treated as Conductor's when it is a terminal tab
+   * in the editor area whose label carries the session-name prefix. This is the
+   * only signal the stable Tab API offers — see the spec for what it does not prove.
+   */
+  private _isConductorTab(tab: vscode.Tab): boolean {
+    return tab.input instanceof vscode.TabInputTerminal
+        && tab.label.startsWith(SESSION_NAME_PREFIX);
   }
 
   /**
@@ -197,12 +231,10 @@ export class SessionManager implements vscode.Disposable {
 
   /** Close a session's terminal. */
   closeSession(session: ActiveSession): void {
-    // The terminal reference on the passed session may be the pre-moveToEditor
-    // panel terminal whose internal VS Code handle is no longer valid — calling
-    // dispose() on it throws "Cannot read properties of undefined (reading
-    // 'dispose')" inside the terminal proxy. Always resolve the live entry from
-    // _sessions by folderPath so we dispose the current, valid terminal
-    // reference. Falls back to session.terminal when the entry has already been
+    // The terminal reference on the passed session may no longer be the live
+    // entry tracked in _sessions. Re-resolve by folderPath so we dispose the
+    // current terminal reference; retaining this safety net is evidence-gated
+    // on #68. Falls back to session.terminal when the entry has already been
     // evicted (e.g. a rapid double-close), in which case ?. makes it a no-op.
     const live = this._findSessionByFolder(session.folderPath);
     const terminal = live?.terminal ?? session.terminal;
@@ -312,10 +344,11 @@ export class SessionManager implements vscode.Disposable {
   }
 
   /**
-   * Handle a terminal-close event with three-tier fallback:
-   * 1. Identity match (the common case for panel terminals).
-   * 2. Name match, disambiguated by folder (handles some reference swaps after moveToEditor).
-   * 3. PID match (handles the editor-tab X case where name becomes "").
+   * Handle a terminal-close event with retained three-tier fallback:
+   * 1. Identity match against the tracked terminal reference.
+   * 2. Name match, disambiguated by folder when identity is unavailable.
+   * 3. PID match when the close event carries no usable name.
+   * The fallback tiers remain as a safety net pending evidence from #68.
    */
   private _handleTerminalClose(terminal: vscode.Terminal): void {
     debugLog(`[close] event name=${JSON.stringify(terminal.name)} sessionsBefore=${this._sessions.size} pids=${this._pidToTerminal.size}`);
