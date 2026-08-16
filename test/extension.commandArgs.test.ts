@@ -49,6 +49,7 @@ import type { ActiveSession } from "../src/sessionManager";
 import { ActiveSessionsProvider, RecentProjectsProvider } from "../src/treeView";
 import { getAllFolders } from "../src/folderSource";
 import type { FolderEntry } from "../src/folderSource";
+import { PathExistenceCache } from "../src/pathExistenceCache";
 import type { PathExistenceCache as PathExistenceCacheType } from "../src/pathExistenceCache";
 
 // ---------------------------------------------------------------------------
@@ -244,4 +245,196 @@ describe("extension.ts command wiring — group-row tree-item args (PR #77 CodeR
       "openSession must route a group-row TreeItem argument through resolvePathArg (reading .group.root) and launch that folder, instead of treating any non-string arg as 'no folder' and falling back to the quick pick"
     ).toHaveBeenCalledWith("C:/proj-open");
   }, 10_000);
+});
+
+// ---------------------------------------------------------------------------
+// claudeConductor.launchInWorkspaceFolder — QuickPick → launchSession flow
+// (issue #103, FR-7, NFR-12d).
+//
+// The command shows a vscode.window.showQuickPick populated from
+// vscode.workspace.workspaceFolders (name + path per item), then on
+// selection calls sessionManager.launchSession(picked.uri.fsPath). It must
+// reuse claudeConductor.openSession's existing result handling verbatim
+// (src/extension.ts:181-188): on { ok: true } call
+// existenceCache.markPresent(folderPath); on { ok: false, reason: "missing" }
+// call existenceCache.markMissing(folderPath) AND
+// vscode.window.showErrorMessage(result.message).
+// ---------------------------------------------------------------------------
+
+type LaunchSessionResult = Awaited<
+  ReturnType<InstanceType<typeof SessionManager>["launchSession"]>
+>;
+
+describe("claudeConductor.launchInWorkspaceFolder — QuickPick → launchSession flow (issue #103, FR-7)", () => {
+  const folderA = "C:/workspace-a";
+  const folderB = "C:/workspace-b";
+
+  function makeWorkspaceFolder(folderPath: string, index: number) {
+    const name = folderPath.split(/[\\/]/).pop() ?? folderPath;
+    return { uri: { fsPath: folderPath }, name, index };
+  }
+
+  /**
+   * Resolves showQuickPick with whichever item the handler itself built at
+   * `index` in the array it passed to showQuickPick — mirroring what a real
+   * QuickPick returns (one of the items it was given), instead of assuming
+   * a specific item shape (e.g. a `.uri` field) that the spec does not fix.
+   * Only FR-7's `picked.uri.fsPath` read on the *resolved value* is a fixed
+   * contract; the QuickPickItem shape the handler builds internally is not.
+   */
+  function mockPickIndex(index: number): void {
+    vi.mocked(vscodeMock.window.showQuickPick).mockImplementationOnce(async (items) => {
+      const arr = (Array.isArray(items) ? items : await items) as unknown[];
+      return arr[index] as never;
+    });
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([]);
+    vi.mocked(fs.mkdirSync).mockReturnValue(undefined as unknown as string);
+    (vscodeMock.window as unknown as { terminals: unknown[] }).terminals = [];
+    (vscodeMock.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [
+      makeWorkspaceFolder(folderA, 0),
+      makeWorkspaceFolder(folderB, 1),
+    ];
+    // vi.restoreAllMocks() restores vi.spyOn spies but does not clear call
+    // history on the module-level vi.fn()s in mocks/vscode.ts — same reason
+    // extension.hookSelfHeal.test.ts:102 mockClear()s showErrorMessage.
+    vi.mocked(vscodeMock.window.showQuickPick).mockClear();
+    vi.mocked(vscodeMock.window.showErrorMessage).mockClear();
+    vi.mocked(vscodeMock.window.showWarningMessage).mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("populates showQuickPick from vscode.workspace.workspaceFolders, one item per folder in order (FR-2, FR-7)", async () => {
+    vi.mocked(vscodeMock.window.showQuickPick).mockResolvedValueOnce(undefined);
+    const context = makeContext();
+    activate(context);
+
+    const handler = capturedCommand("claudeConductor.launchInWorkspaceFolder");
+    await handler();
+
+    expect(vscodeMock.window.showQuickPick).toHaveBeenCalledTimes(1);
+    const itemsArg = vi.mocked(vscodeMock.window.showQuickPick).mock.calls[0][0];
+    const items = (Array.isArray(itemsArg) ? itemsArg : await itemsArg) as Array<{
+      label?: string;
+      description?: string;
+      uri?: { fsPath: string };
+    }>;
+
+    expect(items).toHaveLength(2);
+    // Order matches vscode.workspace.workspaceFolders (FR-2's one-row-per-entry).
+    expect(items[0].label).toBe("workspace-a");
+    expect(items[1].label).toBe("workspace-b");
+
+    // Each item must surface the full path somewhere (description and/or uri.fsPath).
+    for (const item of items) {
+      const pathSomewhere = item.description ?? item.uri?.fsPath ?? "";
+      expect(pathSomewhere === folderA || pathSomewhere === folderB).toBe(true);
+    }
+  });
+
+  it("on selection, calls sessionManager.launchSession(picked.uri.fsPath) (FR-7)", async () => {
+    const launchSpy = vi
+      .spyOn(SessionManager.prototype, "launchSession")
+      .mockResolvedValue({ ok: true, reused: false } as LaunchSessionResult);
+    mockPickIndex(1); // folderB, per the order asserted above
+
+    const context = makeContext();
+    activate(context);
+    const handler = capturedCommand("claudeConductor.launchInWorkspaceFolder");
+
+    await handler();
+
+    expect(launchSpy).toHaveBeenCalledWith(folderB);
+  }, 10_000);
+
+  it("no selection (QuickPick dismissed) does not call launchSession", async () => {
+    const launchSpy = vi.spyOn(SessionManager.prototype, "launchSession");
+    vi.mocked(vscodeMock.window.showQuickPick).mockResolvedValueOnce(undefined);
+
+    const context = makeContext();
+    activate(context);
+    const handler = capturedCommand("claudeConductor.launchInWorkspaceFolder");
+
+    await handler();
+
+    expect(launchSpy).not.toHaveBeenCalled();
+  });
+
+  it("on { ok: true } result, marks the folder present in existenceCache (FR-7, NFR-11)", async () => {
+    vi.spyOn(SessionManager.prototype, "launchSession").mockResolvedValue({
+      ok: true,
+      reused: false,
+    } as LaunchSessionResult);
+    const markPresentSpy = vi.spyOn(PathExistenceCache.prototype, "markPresent");
+    mockPickIndex(1); // folderB
+
+    const context = makeContext();
+    activate(context);
+    const handler = capturedCommand("claudeConductor.launchInWorkspaceFolder");
+
+    await handler();
+
+    expect(markPresentSpy).toHaveBeenCalledWith(folderB);
+  }, 10_000);
+
+  it("on { ok: false, reason: 'missing' } result, marks the folder missing AND shows the error message (FR-7, NFR-11)", async () => {
+    const missingMessage = `Folder no longer exists: ${folderB}`;
+    vi.spyOn(SessionManager.prototype, "launchSession").mockResolvedValue({
+      ok: false,
+      reason: "missing",
+      message: missingMessage,
+    } as LaunchSessionResult);
+    const markMissingSpy = vi.spyOn(PathExistenceCache.prototype, "markMissing");
+    mockPickIndex(1); // folderB
+
+    const context = makeContext();
+    activate(context);
+    const handler = capturedCommand("claudeConductor.launchInWorkspaceFolder");
+
+    await handler();
+
+    expect(
+      markMissingSpy,
+      "existenceCache.markMissing must be called on { ok: false, reason: 'missing' } — mirrors the openSession command handler (src/extension.ts:181-188)"
+    ).toHaveBeenCalledWith(folderB);
+    expect(
+      vscodeMock.window.showErrorMessage,
+      "vscode.window.showErrorMessage(result.message) must be called on the missing-folder branch — mirrors the openSession command handler (src/extension.ts:181-188)"
+    ).toHaveBeenCalledWith(missingMessage);
+  }, 10_000);
+
+  // NFR-9: the 0-workspace-folders empty state reuses the existing
+  // warning-message pattern (src/quickPick.ts:51-66), minus the "Add Folder"
+  // action. Only "warns instead of launching" is asserted — the exact
+  // message text and action list are not spelled out in the spec.
+  it("with no workspace folders open, warns instead of showing the QuickPick or launching (NFR-9)", async () => {
+    (vscodeMock.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders =
+      undefined;
+    const launchSpy = vi.spyOn(SessionManager.prototype, "launchSession");
+
+    const context = makeContext();
+    activate(context);
+    // Clear post-activation: activation itself can surface user-facing
+    // messages depending on fs mocks (see extension.hookSelfHeal.test.ts),
+    // so the warning assertion below must be attributable to the command
+    // handler, not to activate().
+    vi.mocked(vscodeMock.window.showWarningMessage).mockClear();
+    const handler = capturedCommand("claudeConductor.launchInWorkspaceFolder");
+
+    await handler();
+
+    expect(
+      vscodeMock.window.showWarningMessage,
+      "with zero workspace folders open, the command must warn (reusing quickPick.ts's empty-state pattern minus 'Add Folder') rather than show an empty QuickPick (NFR-9)"
+    ).toHaveBeenCalled();
+    expect(vscodeMock.window.showQuickPick).not.toHaveBeenCalled();
+    expect(launchSpy).not.toHaveBeenCalled();
+  });
 });

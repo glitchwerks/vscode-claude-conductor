@@ -15,9 +15,14 @@ export const VIEW_ITEM = {
   PROJECT_ROOT_UNFAVORITED: "projectRoot.unfavorited",
   PROJECT_ROOT_MISSING:     "projectRoot.missing",
   RECENT_PROJECT_LEAF:      "recentProjectLeaf",
+  WORKSPACE_FOLDER_LEAF:    "workspaceFolderLeaf",
   WORKTREE_CHILD:           "worktreeChild",
   ACTIVE_SESSION:           "activeSession",
 } as const;
+
+export function getWorkspaceFolders(): readonly vscode.WorkspaceFolder[] {
+  return vscode.workspace.workspaceFolders ?? [];
+}
 
 // ---------------------------------------------------------------------------
 // Active Sessions — tree items
@@ -117,6 +122,58 @@ export class ActiveSessionsProvider
     return groups.map((g) => {
       const fav = this.favoritesStore.isFavorited(g.root);
       return new ActiveGroupItem(g, { favorited: fav });
+    });
+  }
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Workspace Folders — tree items
+// ---------------------------------------------------------------------------
+
+class WorkspaceFolderItem extends vscode.TreeItem {
+  constructor(folder: vscode.WorkspaceFolder, activeSession?: ActiveSession) {
+    super(folder.name, vscode.TreeItemCollapsibleState.None);
+    this.description = folder.uri.fsPath;
+    this.tooltip = folder.uri.fsPath;
+    this.contextValue = VIEW_ITEM.WORKSPACE_FOLDER_LEAF;
+    this.iconPath = activeSession
+      ? activeSession.isIdle
+        ? new vscode.ThemeIcon("bell", new vscode.ThemeColor("editorWarning.foreground"))
+        : new vscode.ThemeIcon("terminal", new vscode.ThemeColor("testing.iconPassed"))
+      : new vscode.ThemeIcon("folder");
+    this.command = {
+      command: "claudeConductor.openSession",
+      title: "Launch Session",
+      arguments: [folder.uri.fsPath],
+    };
+  }
+}
+
+export class WorkspaceFoldersProvider
+  implements vscode.TreeDataProvider<WorkspaceFolderItem>
+{
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  constructor(private readonly sessionManager: SessionManager) {
+    sessionManager.onDidChangeSessions(() => this._onDidChangeTreeData.fire());
+    vscode.workspace.onDidChangeWorkspaceFolders(() => this._onDidChangeTreeData.fire());
+  }
+
+  getTreeItem(element: WorkspaceFolderItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(): WorkspaceFolderItem[] {
+    return getWorkspaceFolders().map((folder) => {
+      const activeSession = this.sessionManager.activeSessions.find(
+        (session) => session.folderPath === folder.uri.fsPath
+      );
+      return new WorkspaceFolderItem(folder, activeSession);
     });
   }
 

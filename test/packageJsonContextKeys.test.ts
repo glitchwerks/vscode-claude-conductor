@@ -227,4 +227,127 @@ describe("package.json viewItem ↔ VIEW_ITEM bidirectional bijection", () => {
       ).toContain(RECENT_PROJECT_LEAF);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Issue #103 (workspace-folder-launcher-design spec, FR-4): a new
+  // "Workspace Folders" tree section needs its own leaf-only contextValue,
+  // wired into the openSession inline-launch button the same way
+  // recentProjectLeaf/worktreeChild/projectRoot.favorited already are
+  // (package.json:162-176 pattern). This extends the existing bijection
+  // harness rather than duplicating it, per NFR-12(c) bullet 1.
+  // -------------------------------------------------------------------------
+  describe("issue #103 — Launch Session inline button for the new Workspace Folders view", () => {
+    const WORKSPACE_FOLDER_LEAF = "workspaceFolderLeaf";
+
+    it("VIEW_ITEM exposes the WORKSPACE_FOLDER_LEAF token so the bijection detector above can track it (FR-4)", () => {
+      expect(
+        VIEW_ITEM_VALUES,
+        `VIEW_ITEM should include a '${WORKSPACE_FOLDER_LEAF}' value for the Workspace Folders leaf contextValue (issue #103, FR-4) so the bijection tests above cover it`
+      ).toContain(WORKSPACE_FOLDER_LEAF);
+    });
+
+    it("an openSession view/item/context clause matches the workspaceFolderLeaf token (FR-4)", () => {
+      const openSessionClauses = clauses.filter(
+        (c) => c.command === "claudeConductor.openSession" && c.when
+      );
+      const matchesLeafToken = openSessionClauses.some((c) => {
+        const when = c.when ?? "";
+        const literals = extractEqLiterals(when);
+        const regexes = extractRegexes(when);
+        return (
+          literals.includes(WORKSPACE_FOLDER_LEAF) ||
+          regexes.some((re) => re.test(WORKSPACE_FOLDER_LEAF))
+        );
+      });
+
+      expect(
+        matchesLeafToken,
+        `no openSession clause matches the '${WORKSPACE_FOLDER_LEAF}' token — wire it into package.json's view/item/context menu contribution for the inline launch button (FR-4), mirroring the recentProjectLeaf/favorites/worktreeChild clauses at package.json:162-176`
+      ).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #103 (FR-6): the new "Workspace Folders" view's visibility when-clause
+// lives on contributes.views, not contributes.menus["view/item/context"] — it
+// is outside what the bijection harness above parses. Purpose-built coverage,
+// per NFR-12(c) bullet 2.
+// ---------------------------------------------------------------------------
+
+interface ViewContribution {
+  id?: string;
+  name?: string;
+  when?: string;
+}
+
+const pkgViews = JSON.parse(fs.readFileSync(PKG_PATH, "utf8")) as {
+  contributes?: { views?: { claudeConductor?: ViewContribution[] } };
+};
+
+const claudeConductorViews = pkgViews.contributes?.views?.claudeConductor ?? [];
+const workspaceFoldersView = claudeConductorViews.find((v) => v.name === "Workspace Folders");
+
+describe("contributes.views — Workspace Folders visibility when-clause (issue #103, FR-6)", () => {
+  it("a 'Workspace Folders' view entry exists in contributes.views.claudeConductor (FR-1)", () => {
+    expect(
+      workspaceFoldersView,
+      "package.json's contributes.views.claudeConductor must include a 'Workspace Folders' entry, a 4th tree section alongside Active Sessions / Favorites / Recent Projects (FR-1)"
+    ).toBeDefined();
+  });
+
+  it("the 'Workspace Folders' view is gated by the claudeConductor.hasMultiRootWorkspace when-clause (FR-6)", () => {
+    expect(
+      workspaceFoldersView?.when,
+      "the new view must carry a 'when' clause referencing claudeConductor.hasMultiRootWorkspace so the section is hidden entirely at 0 or 1 workspace roots (FR-6)"
+    ).toContain("claudeConductor.hasMultiRootWorkspace");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #103 (FR-7, NFR-8): the new claudeConductor.launchInWorkspaceFolder
+// command must be contributed to the command palette — registered
+// unconditionally (no `when` gate on the command's own registration; NFR-8),
+// unlike claudeConductor.openHere/openHereFromFile which are explicitly
+// palette-hidden via a `commandPalette` `when: "false"` clause.
+// ---------------------------------------------------------------------------
+
+interface CommandContribution {
+  command?: string;
+  title?: string;
+}
+
+const pkgCommands = JSON.parse(fs.readFileSync(PKG_PATH, "utf8")) as {
+  contributes?: {
+    commands?: CommandContribution[];
+    menus?: { commandPalette?: Menu[] };
+  };
+};
+
+const contributedCommands = pkgCommands.contributes?.commands ?? [];
+const launchInWorkspaceFolderCommand = contributedCommands.find(
+  (c) => c.command === "claudeConductor.launchInWorkspaceFolder"
+);
+
+describe("contributes.commands — claudeConductor.launchInWorkspaceFolder (issue #103, FR-7)", () => {
+  it("is contributed with the exact command id and title from FR-7", () => {
+    expect(
+      launchInWorkspaceFolderCommand,
+      "package.json's contributes.commands must include claudeConductor.launchInWorkspaceFolder so it is visible in the command palette (FR-7)"
+    ).toBeDefined();
+    expect(launchInWorkspaceFolderCommand?.title).toBe(
+      "Claude Conductor: Launch Session in Workspace Folder..."
+    );
+  });
+
+  it("is not hidden from the command palette (NFR-8: registered unconditionally, no when-gate)", () => {
+    const paletteClauses = pkgCommands.contributes?.menus?.commandPalette ?? [];
+    const hiddenClause = paletteClauses.find(
+      (c) => c.command === "claudeConductor.launchInWorkspaceFolder" && c.when === "false"
+    );
+    expect(
+      hiddenClause,
+      "claudeConductor.launchInWorkspaceFolder must not carry a commandPalette when:'false' clause (unlike openHere/openHereFromFile) — NFR-8 requires it stay visible in the command palette"
+    ).toBeUndefined();
+  });
 });

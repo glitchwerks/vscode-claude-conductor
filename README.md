@@ -16,11 +16,12 @@ Running Claude Code against several projects at once is painful in a plain termi
 
 ### Activity Bar Sidebar
 
-A dedicated "Claude Conductor" panel with three sections:
+A dedicated "Claude Conductor" panel with four sections:
 
 - **Active Sessions** — currently running Claude terminals. Sessions are grouped by project root; click a project row to expand it and see its sessions. Click a session leaf to focus it. A green terminal icon means the session is working; an orange bell means it's waiting for your input.
 - **Favorites** — a curated list of project roots you've pinned for quick access. Sits between Active Sessions and Recent Projects.
 - **Recent Projects** — your VS Code recently opened folders plus any configured extras, grouped by project root. Click a project row to expand it and see its worktrees. Click a folder leaf to launch a new session.
+- **Workspace Folders** — shown only when a multi-root VS Code workspace is open (more than one root folder), with one row per native workspace folder. Active sessions use the same working/waiting icons as Active Sessions; click a row to launch or focus its session.
 
 ### Favorites
 
@@ -100,6 +101,7 @@ This setting is off by default and has no effect on normal operation. Disable it
 Available from the command palette (`Ctrl+Shift+P`):
 
 - `Claude Conductor: Launch Session`
+- `Claude Conductor: Launch Session in Workspace Folder...`
 - `Claude Conductor: Add Folder`
 - `Claude Conductor: Next Session` / `Previous Session`
 - `Claude Conductor: Setup Notification Hooks`

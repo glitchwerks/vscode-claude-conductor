@@ -2,7 +2,13 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { SessionManager, ActiveSession } from "./sessionManager";
 import { showQuickPick, addFolderPrompt } from "./quickPick";
-import { ActiveSessionsProvider, RecentProjectsProvider, FavoritesProvider } from "./treeView";
+import {
+  ActiveSessionsProvider,
+  RecentProjectsProvider,
+  FavoritesProvider,
+  WorkspaceFoldersProvider,
+  getWorkspaceFolders,
+} from "./treeView";
 import { StatusBar } from "./statusBar";
 import { ClaudeTerminalLinkProvider } from "./terminalLinks";
 import { StateWatcher } from "./stateWatcher";
@@ -137,6 +143,18 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(sessionManager);
   const existenceCache = new PathExistenceCache();
 
+  function updateMultiRootWorkspaceContext(): void {
+    void vscode.commands.executeCommand(
+      "setContext",
+      "claudeConductor.hasMultiRootWorkspace",
+      getWorkspaceFolders().length > 1
+    );
+  }
+  updateMultiRootWorkspaceContext();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(updateMultiRootWorkspaceContext)
+  );
+
   // URI handler for cross-window launch
   context.subscriptions.push(
     vscode.window.registerUriHandler(
@@ -179,6 +197,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const activeProvider = new ActiveSessionsProvider(sessionManager, favoritesStore);
   const recentProvider = new RecentProjectsProvider(sessionManager, favoritesStore, existenceCache);
   const favoritesProvider = new FavoritesProvider(favoritesStore, existenceCache);
+  const workspaceFoldersProvider = new WorkspaceFoldersProvider(sessionManager);
 
   const favoritesView = vscode.window.createTreeView("claudeConductor.favorites", {
     treeDataProvider: favoritesProvider,
@@ -195,6 +214,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider("claudeConductor.activeSessions", activeProvider),
     vscode.window.registerTreeDataProvider("claudeConductor.recentProjects", recentProvider),
+    vscode.window.registerTreeDataProvider("claudeConductor.workspaceFolders", workspaceFoldersProvider),
     favoritesView,
     favoritesStore,
     existenceCache,
@@ -255,6 +275,39 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       } else {
         await showQuickPick(sessionManager, existenceCache);
+      }
+    }),
+
+    vscode.commands.registerCommand("claudeConductor.launchInWorkspaceFolder", async () => {
+      const folders = getWorkspaceFolders();
+      if (folders.length === 0) {
+        void vscode.window.showWarningMessage(
+          "No workspace folders found. Open a folder or workspace in VS Code first."
+        );
+        return;
+      }
+
+      const items = folders.map((folder) => ({
+        label: folder.name,
+        description: folder.uri.fsPath,
+        uri: folder.uri,
+      }));
+      const picked = await vscode.window.showQuickPick(items, {
+        title: "Launch Session in Workspace Folder",
+        placeHolder: "Select a workspace folder",
+        matchOnDescription: true,
+      });
+      if (!picked) {
+        return;
+      }
+
+      const folderPath = picked.uri.fsPath;
+      const result = await sessionManager.launchSession(folderPath);
+      if (result.ok) {
+        existenceCache.markPresent(folderPath);
+      } else if (result.reason === "missing") {
+        existenceCache.markMissing(folderPath);
+        void vscode.window.showErrorMessage(result.message);
       }
     }),
 
