@@ -10,7 +10,7 @@
  *  - Dedup filter removed: active-session folders still appear in Recent Projects.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ActiveSession } from "../src/sessionManager";
 import type { FolderEntry } from "../src/folderSource";
 import type { FavoritesStore as FavoritesStoreType } from "../src/favoritesStore";
@@ -104,12 +104,18 @@ vi.mock("../src/folderSource", () => ({
   getAllFolders: vi.fn(),
 }));
 
-import { ActiveSessionsProvider, RecentProjectsProvider, VIEW_ITEM } from "../src/treeView";
+import {
+  ActiveSessionsProvider,
+  RecentProjectsProvider,
+  WorkspaceFoldersProvider,
+  VIEW_ITEM,
+} from "../src/treeView";
 import { getAllFolders } from "../src/folderSource";
 import {
   TreeItemCollapsibleState,
   ThemeIcon,
   ThemeColor,
+  workspace,
 } from "./mocks/vscode";
 
 // ---------------------------------------------------------------------------
@@ -380,6 +386,150 @@ describe("VIEW_ITEM constants", () => {
     expect(VIEW_ITEM.PROJECT_ROOT_MISSING).toBe("projectRoot.missing");
     expect(VIEW_ITEM.WORKTREE_CHILD).toBe("worktreeChild");
     expect(VIEW_ITEM.ACTIVE_SESSION).toBe("activeSession");
+  });
+
+  // Issue #103, FR-4: new leaf-only token for Workspace Folders rows,
+  // mirroring RECENT_PROJECT_LEAF's precedent ("recentProjectLeaf").
+  it("has the WORKSPACE_FOLDER_LEAF token for Workspace Folders rows (issue #103, FR-4)", () => {
+    expect(VIEW_ITEM.WORKSPACE_FOLDER_LEAF).toBe("workspaceFolderLeaf");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WorkspaceFoldersProvider / WorkspaceFolderItem (issue #103)
+//
+// A 4th tree section, structurally similar to ActiveSessionsProvider /
+// RecentProjectsProvider but flat (no group/leaf split) — exactly one row
+// per vscode.workspace.workspaceFolders entry (FR-2). Each row's icon
+// reflects active-session state by reusing ActiveSessionItem's exact
+// icon-selection logic (FR-3): bell/editorWarning.foreground when the
+// matched session is idle, terminal/testing.iconPassed otherwise, folder
+// as the default when no session matches.
+// ---------------------------------------------------------------------------
+
+describe("WorkspaceFoldersProvider — one row per native workspace folder (issue #103)", () => {
+  const folderA = "/home/user/workspace-a";
+  const folderB = "/home/user/workspace-b";
+
+  function makeWorkspaceFolder(
+    folderPath: string,
+    name?: string,
+    index = 0
+  ): import("vscode").WorkspaceFolder {
+    const parts = folderPath.split(/[\\/]/);
+    return {
+      uri: { fsPath: folderPath },
+      name: name ?? parts[parts.length - 1] ?? folderPath,
+      index,
+    } as unknown as import("vscode").WorkspaceFolder;
+  }
+
+  afterEach(() => {
+    (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = undefined;
+  });
+
+  it("getChildren() returns exactly one row per vscode.workspace.workspaceFolders entry (FR-2, NFR-12b)", () => {
+    (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [
+      makeWorkspaceFolder(folderA),
+      makeWorkspaceFolder(folderB),
+    ];
+    const provider = new WorkspaceFoldersProvider(makeSessionManager([]) as never);
+
+    const rows = provider.getChildren();
+
+    expect(rows).toHaveLength(2);
+  });
+
+  it("row label is the folder basename and description is the full path (FR-2)", () => {
+    (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [
+      makeWorkspaceFolder(folderA, "workspace-a"),
+    ];
+    const provider = new WorkspaceFoldersProvider(makeSessionManager([]) as never);
+
+    const [row] = provider.getChildren();
+
+    expect(row.label).toBe("workspace-a");
+    expect(row.description).toBe(folderA);
+  });
+
+  it("row contextValue is VIEW_ITEM.WORKSPACE_FOLDER_LEAF (FR-4)", () => {
+    (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [
+      makeWorkspaceFolder(folderA),
+    ];
+    const provider = new WorkspaceFoldersProvider(makeSessionManager([]) as never);
+
+    const [row] = provider.getChildren();
+
+    expect(row.contextValue).toBe(VIEW_ITEM.WORKSPACE_FOLDER_LEAF);
+  });
+
+  it("returns an empty array when vscode.workspace.workspaceFolders is undefined (NFR-13, undefined-safe)", () => {
+    (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = undefined;
+    const provider = new WorkspaceFoldersProvider(makeSessionManager([]) as never);
+
+    expect(provider.getChildren()).toEqual([]);
+  });
+
+  describe("active-session icon selection (FR-3, reuses ActiveSessionItem's exact icon logic)", () => {
+    it("no active session for the folder → default 'folder' ThemeIcon", () => {
+      (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [
+        makeWorkspaceFolder(folderA),
+      ];
+      const provider = new WorkspaceFoldersProvider(makeSessionManager([]) as never);
+
+      const [row] = provider.getChildren();
+      const icon = row.iconPath as ThemeIcon;
+
+      expect(icon).toBeInstanceOf(ThemeIcon);
+      expect(icon.id).toBe("folder");
+    });
+
+    it("matching active session with isIdle=true → 'bell' icon, editorWarning.foreground color", () => {
+      (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [
+        makeWorkspaceFolder(folderA),
+      ];
+      const session = makeSession(folderA);
+      session.isIdle = true;
+      const provider = new WorkspaceFoldersProvider(makeSessionManager([session]) as never);
+
+      const [row] = provider.getChildren();
+      const icon = row.iconPath as ThemeIcon;
+
+      expect(icon).toBeInstanceOf(ThemeIcon);
+      expect(icon.id).toBe("bell");
+      expect(icon.color).toBeInstanceOf(ThemeColor);
+      expect(icon.color!.id).toBe("editorWarning.foreground");
+    });
+
+    it("matching active session with isIdle=false → 'terminal' icon, testing.iconPassed color", () => {
+      (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [
+        makeWorkspaceFolder(folderA),
+      ];
+      const session = makeSession(folderA);
+      session.isIdle = false;
+      const provider = new WorkspaceFoldersProvider(makeSessionManager([session]) as never);
+
+      const [row] = provider.getChildren();
+      const icon = row.iconPath as ThemeIcon;
+
+      expect(icon).toBeInstanceOf(ThemeIcon);
+      expect(icon.id).toBe("terminal");
+      expect(icon.color).toBeInstanceOf(ThemeColor);
+      expect(icon.color!.id).toBe("testing.iconPassed");
+    });
+
+    it("a session for a different folder does not affect this row's icon", () => {
+      (workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [
+        makeWorkspaceFolder(folderA),
+      ];
+      const otherSession = makeSession(folderB);
+      const provider = new WorkspaceFoldersProvider(makeSessionManager([otherSession]) as never);
+
+      const [row] = provider.getChildren();
+      const icon = row.iconPath as ThemeIcon;
+
+      expect(icon.id).toBe("folder");
+    });
   });
 });
 

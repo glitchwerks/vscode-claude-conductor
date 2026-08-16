@@ -43,6 +43,10 @@
         "icon": "$(play)"
       },
       {
+        "command": "claudeConductor.launchInWorkspaceFolder",
+        "title": "Claude Conductor: Launch Session in Workspace Folder..."
+      },
+      {
         "command": "claudeConductor.addFolder",
         "title": "Claude Conductor: Add Folder",
         "icon": "$(add)"
@@ -130,6 +134,11 @@
         {
           "id": "claudeConductor.recentProjects",
           "name": "Recent Projects"
+        },
+        {
+          "id": "claudeConductor.workspaceFolders",
+          "name": "Workspace Folders",
+          "when": "claudeConductor.hasMultiRootWorkspace"
         }
       ]
     },
@@ -175,6 +184,11 @@
         {
           "command": "claudeConductor.openSession",
           "when": "view == claudeConductor.recentProjects && viewItem == recentProjectLeaf",
+          "group": "inline"
+        },
+        {
+          "command": "claudeConductor.openSession",
+          "when": "view == claudeConductor.workspaceFolders && viewItem == workspaceFolderLeaf",
           "group": "inline"
         },
         {

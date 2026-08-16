@@ -332,6 +332,8 @@ export function resetTabGroups(): void {
 export const workspace = {
   workspaceFolders: undefined as unknown,
 
+  onDidChangeWorkspaceFolders: vi.fn().mockReturnValue(new Disposable(() => {})),
+
   getConfiguration: vi.fn().mockImplementation(() => new WorkspaceConfigurationStub()),
 
   onDidChangeConfiguration: vi.fn().mockReturnValue(new Disposable(() => {})),
