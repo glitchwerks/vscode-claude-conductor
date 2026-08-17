@@ -2,7 +2,12 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { getClaudeCommand, getReuseTerminal, getLaunchDelayMs } from "./config";
+import {
+  getClaudeCommand,
+  getReuseTerminal,
+  getLaunchDelayMs,
+  getFolderAlias,
+} from "./config";
 import { log, debugLog } from "./output";
 import { isLikelyNetworkPath } from "./networkPath";
 
@@ -116,7 +121,7 @@ export class SessionManager implements vscode.Disposable {
       }
     }
 
-    const folderName = path.basename(normalized);
+    const folderName = getFolderAlias(normalized) ?? path.basename(normalized);
     const targetColumn = this._resolveTargetColumn();
     const terminal = vscode.window.createTerminal({
       name: `${SESSION_NAME_PREFIX}${folderName}`,

@@ -5,6 +5,7 @@ import { getAllFolders, FolderEntry } from "./folderSource";
 import { groupByProjectRoot, ProjectGroup } from "./projectGrouping";
 import { FavoritesStore } from "./favoritesStore";
 import { PathExistenceCache } from "./pathExistenceCache";
+import { getFolderAlias } from "./config";
 
 // ---------------------------------------------------------------------------
 // Shared contextValue tokens
@@ -14,7 +15,8 @@ export const VIEW_ITEM = {
   PROJECT_ROOT_FAVORITED:   "projectRoot.favorited",
   PROJECT_ROOT_UNFAVORITED: "projectRoot.unfavorited",
   PROJECT_ROOT_MISSING:     "projectRoot.missing",
-  RECENT_PROJECT_LEAF:      "recentProjectLeaf",
+  RECENT_PROJECT_LEAF_CONFIGURED: "recentProjectLeaf.configured",
+  RECENT_PROJECT_LEAF_RECENT:     "recentProjectLeaf.recent",
   WORKSPACE_FOLDER_LEAF:    "workspaceFolderLeaf",
   WORKTREE_CHILD:           "worktreeChild",
   ACTIVE_SESSION:           "activeSession",
@@ -36,7 +38,7 @@ class ActiveGroupItem extends vscode.TreeItem {
   readonly group: ProjectGroup<ActiveSession>;
 
   constructor(group: ProjectGroup<ActiveSession>, state: { favorited: boolean }) {
-    const label = path.basename(group.root);
+    const label = getFolderAlias(group.root) ?? path.basename(group.root);
     super(label, vscode.TreeItemCollapsibleState.Collapsed);
     this.group = group;
 
@@ -59,7 +61,10 @@ class ActiveSessionItem extends vscode.TreeItem {
   readonly session: ActiveSession;
 
   constructor(session: ActiveSession, isWorktreeChild: boolean) {
-    super(session.folderName, vscode.TreeItemCollapsibleState.None);
+    super(
+      getFolderAlias(session.folderPath) ?? session.folderName,
+      vscode.TreeItemCollapsibleState.None
+    );
     this.session = session;
     // Worktree children: show the branch segment (basename of worktree path)
     // as the description — the parent is already implied by the group row.
@@ -94,6 +99,11 @@ export class ActiveSessionsProvider
   ) {
     sessionManager.onDidChangeSessions(() => this._onDidChangeTreeData.fire());
     favoritesStore.onDidChange(() => this._onDidChangeTreeData.fire());
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("claudeConductor.folderAliases")) {
+        this._onDidChangeTreeData.fire();
+      }
+    });
   }
 
   getTreeItem(element: ActiveTreeNode): vscode.TreeItem {
@@ -202,7 +212,7 @@ class RecentGroupItem extends vscode.TreeItem {
     group: ProjectGroup<FolderEntry>,
     state: { favorited: boolean; missing: boolean }
   ) {
-    const label = path.basename(group.root);
+    const label = getFolderAlias(group.root) ?? path.basename(group.root);
     super(label, vscode.TreeItemCollapsibleState.Collapsed);
     this.group = group;
 
@@ -247,7 +257,10 @@ class RecentProjectItem extends vscode.TreeItem {
   readonly folderPath: string;
 
   constructor(entry: FolderEntry, isWorktreeChild: boolean) {
-    super(entry.name, vscode.TreeItemCollapsibleState.None);
+    super(
+      getFolderAlias(entry.folderPath) ?? entry.name,
+      vscode.TreeItemCollapsibleState.None
+    );
     this.folderPath = entry.folderPath;
     this.description = isWorktreeChild
       ? path.basename(entry.folderPath)
@@ -256,7 +269,9 @@ class RecentProjectItem extends vscode.TreeItem {
     this.iconPath = new vscode.ThemeIcon("folder");
     this.contextValue = isWorktreeChild
       ? VIEW_ITEM.WORKTREE_CHILD
-      : VIEW_ITEM.RECENT_PROJECT_LEAF;
+      : entry.source === "configured"
+        ? VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED
+        : VIEW_ITEM.RECENT_PROJECT_LEAF_RECENT;
 
     this.command = {
       command: "claudeConductor.openSession",
@@ -282,6 +297,14 @@ export class RecentProjectsProvider
     sessionManager.onDidChangeSessions(() => this._onDidChangeTreeData.fire(undefined));
     favoritesStore.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
     existenceCache.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (
+        event.affectsConfiguration("claudeConductor.folderAliases") ||
+        event.affectsConfiguration("claudeConductor.extraFolders")
+      ) {
+        this._onDidChangeTreeData.fire(undefined);
+      }
+    });
   }
 
   getTreeItem(element: RecentTreeNode): vscode.TreeItem {
@@ -338,7 +361,10 @@ class FavoriteLeafItem extends vscode.TreeItem {
   readonly folderPath: string;
 
   constructor(folderPath: string, state: { missing: boolean }) {
-    super(path.basename(folderPath) || folderPath, vscode.TreeItemCollapsibleState.None);
+    super(
+      getFolderAlias(folderPath) ?? (path.basename(folderPath) || folderPath),
+      vscode.TreeItemCollapsibleState.None
+    );
     this.folderPath = folderPath;
     this.tooltip = state.missing
       ? "This folder is missing on disk. Click or press Enter to relocate; right-click for more options."

@@ -6,6 +6,7 @@ All notable changes to the Claude Conductor extension are documented here.
 
 ### Added
 
+- **Sidebar folder aliases, removal, and bulk actions** — Active Sessions and Recent Projects now support friendly display aliases, multi-select actions, bulk session closing, and removal of configured Recent Projects folders. New sessions use aliases in terminal tab titles. Implements #80.
 - **Workspace-folder session launching for multi-root workspaces** — a new Workspace Folders sidebar section lists each native VS Code workspace folder with active-session status, while `claudeConductor.launchInWorkspaceFolder` offers the same targets from the Command Palette. Implements #103.
 
 ### Fixed

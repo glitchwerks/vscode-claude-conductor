@@ -8,6 +8,7 @@ import {
   FavoritesProvider,
   WorkspaceFoldersProvider,
   getWorkspaceFolders,
+  VIEW_ITEM,
 } from "./treeView";
 import { StatusBar } from "./statusBar";
 import { ClaudeTerminalLinkProvider } from "./terminalLinks";
@@ -17,6 +18,7 @@ import { isSameWorkspaceFolder } from "./workspaceMatch";
 import { FavoritesStore } from "./favoritesStore";
 import { PathExistenceCache } from "./pathExistenceCache";
 import { log } from "./output";
+import { getFolderAlias, removeExtraFolder, setFolderAlias } from "./config";
 
 let sessionManager: SessionManager;
 const notifiedErrorSignatures = new Set<string>();
@@ -203,6 +205,14 @@ export function activate(context: vscode.ExtensionContext): void {
     treeDataProvider: favoritesProvider,
     showCollapseAll: false,
   });
+  const activeView = vscode.window.createTreeView("claudeConductor.activeSessions", {
+    treeDataProvider: activeProvider,
+    canSelectMany: true,
+  });
+  const recentView = vscode.window.createTreeView("claudeConductor.recentProjects", {
+    treeDataProvider: recentProvider,
+    canSelectMany: true,
+  });
 
   // Banner above the Favorites tree when storage drift produces > MAX_FAVORITES entries.
   function refreshOverCapBanner() {
@@ -212,9 +222,9 @@ export function activate(context: vscode.ExtensionContext): void {
   refreshOverCapBanner();  // initial state
 
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider("claudeConductor.activeSessions", activeProvider),
-    vscode.window.registerTreeDataProvider("claudeConductor.recentProjects", recentProvider),
     vscode.window.registerTreeDataProvider("claudeConductor.workspaceFolders", workspaceFoldersProvider),
+    activeView,
+    recentView,
     favoritesView,
     favoritesStore,
     existenceCache,
@@ -332,10 +342,62 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    vscode.commands.registerCommand("claudeConductor.closeSession", (arg?: unknown) => {
+    vscode.commands.registerCommand("claudeConductor.closeSession", (
+      arg?: unknown,
+      selected?: readonly unknown[]
+    ) => {
+      if (selected && selected.length > 1) {
+        for (const item of selected) {
+          const session = resolveSession(item);
+          if (session) {
+            sessionManager.closeSession(session);
+          }
+        }
+        return;
+      }
+
       const session = resolveSession(arg);
       if (session) {
         sessionManager.closeSession(session);
+      }
+    }),
+
+    vscode.commands.registerCommand("claudeConductor.renameFolder", async (arg?: unknown) => {
+      const folderPath = resolvePathArg(arg) ?? resolveSession(arg)?.folderPath;
+      if (!folderPath) return;
+
+      const input = await vscode.window.showInputBox({
+        title: "Rename Folder",
+        prompt: "Enter a display name for this folder",
+        value: getFolderAlias(folderPath) ?? path.basename(folderPath),
+        validateInput: (value) => value.trim() ? null : "Name cannot be empty",
+      });
+      if (input === undefined) return;
+
+      await setFolderAlias(folderPath, input);
+    }),
+
+    vscode.commands.registerCommand("claudeConductor.removeFolder", async (
+      arg?: unknown,
+      selected?: readonly unknown[]
+    ) => {
+      if (selected && selected.length > 1) {
+        for (const item of selected) {
+          const treeItem = item as { contextValue?: unknown };
+          if (treeItem.contextValue !== VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED) {
+            continue;
+          }
+          const folderPath = resolvePathArg(item);
+          if (folderPath) {
+            await removeExtraFolder(folderPath);
+          }
+        }
+        return;
+      }
+
+      const folderPath = resolvePathArg(arg);
+      if (folderPath) {
+        await removeExtraFolder(folderPath);
       }
     }),
 

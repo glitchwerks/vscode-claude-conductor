@@ -104,13 +104,33 @@ vi.mock("../src/folderSource", () => ({
   getAllFolders: vi.fn(),
 }));
 
+// FR-3: alias-aware label rendering reads getFolderAlias() at render time.
+// Mock the whole config module so each site's alias lookup is controllable
+// per test; a bare vi.fn() (returning undefined by default) preserves every
+// pre-existing test's basename-fallback behavior unchanged.
+vi.mock("../src/config", () => ({
+  getFolderAliases: vi.fn(),
+  getFolderAlias: vi.fn(),
+  setFolderAlias: vi.fn(),
+  removeFolderAlias: vi.fn(),
+  removeExtraFolder: vi.fn(),
+  getClaudeCommand: vi.fn(),
+  getReuseTerminal: vi.fn(),
+  getEnableNotifications: vi.fn(),
+  getExtraFolders: vi.fn(),
+  getLaunchDelayMs: vi.fn(),
+  getDebugLogging: vi.fn(),
+}));
+
 import {
   ActiveSessionsProvider,
   RecentProjectsProvider,
   WorkspaceFoldersProvider,
+  FavoritesProvider,
   VIEW_ITEM,
 } from "../src/treeView";
 import { getAllFolders } from "../src/folderSource";
+import { getFolderAlias } from "../src/config";
 import {
   TreeItemCollapsibleState,
   ThemeIcon,
@@ -324,14 +344,15 @@ describe("RecentProjectsProvider — grouped tree", () => {
 // non-worktree leaf rows, separate from the group row's projectRoot.* token.
 // ---------------------------------------------------------------------------
 
-describe("RecentProjectsProvider — leaf contextValue for Launch Session (issue #79)", () => {
+describe("RecentProjectsProvider — leaf contextValue for Launch Session (issue #79, split by source per FR-9/FR-10)", () => {
   const root = "/home/user/my-project";
 
   beforeEach(() => {
     vi.mocked(getAllFolders).mockResolvedValue([]);
   });
 
-  it("non-worktree leaf row has its own leaf-only contextValue, distinct from the group row's projectRoot.* token", async () => {
+  it("a 'recent'-source non-worktree leaf row gets RECENT_PROJECT_LEAF_RECENT, distinct from the group row's projectRoot.* token (FR-9)", async () => {
+    // makeFolder() hardcodes source: "recent".
     vi.mocked(getAllFolders).mockResolvedValue([makeFolder(root)]);
     const mgr = makeSessionManager([]);
     const provider = new RecentProjectsProvider(mgr as never, makeFakeFavoritesStore(), makeFakeExistenceCache());
@@ -340,12 +361,29 @@ describe("RecentProjectsProvider — leaf contextValue for Launch Session (issue
     const leaves = await provider.getChildren(topLevel[0]);
 
     expect(leaves).toHaveLength(1);
-    // Assumed token name from issue #79's suggested example — see
-    // VIEW_ITEM.RECENT_PROJECT_LEAF once introduced.
-    expect(leaves[0].contextValue).toBe("recentProjectLeaf");
+    expect(leaves[0].contextValue).toBe(VIEW_ITEM.RECENT_PROJECT_LEAF_RECENT);
     // And it must never collide with the group row's own contextValue —
     // otherwise a menu clause aimed at the leaf would also hit the group.
     expect(leaves[0].contextValue).not.toBe(topLevel[0].contextValue);
+  });
+
+  it("a 'configured'-source non-worktree leaf row gets RECENT_PROJECT_LEAF_CONFIGURED (FR-9)", async () => {
+    const configuredEntry: FolderEntry = {
+      folderPath: root,
+      name: "my-project",
+      parentDir: "/home/user",
+      source: "configured",
+    };
+    vi.mocked(getAllFolders).mockResolvedValue([configuredEntry]);
+    const mgr = makeSessionManager([]);
+    const provider = new RecentProjectsProvider(mgr as never, makeFakeFavoritesStore(), makeFakeExistenceCache());
+
+    const topLevel = await provider.getChildren(undefined);
+    const leaves = await provider.getChildren(topLevel[0]);
+
+    expect(leaves).toHaveLength(1);
+    expect(leaves[0].contextValue).toBe(VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED);
+    expect(leaves[0].contextValue).not.toBe(VIEW_ITEM.RECENT_PROJECT_LEAF_RECENT);
   });
 
   it("non-worktree leaf contextValue does not vary with the group's favorited state", async () => {
@@ -371,7 +409,7 @@ describe("RecentProjectsProvider — leaf contextValue for Launch Session (issue
     expect(topLevel[0].contextValue).toBe(VIEW_ITEM.PROJECT_ROOT_FAVORITED);
 
     const leaves = await provider.getChildren(topLevel[0]);
-    expect(leaves[0].contextValue).toBe("recentProjectLeaf");
+    expect(leaves[0].contextValue).toBe(VIEW_ITEM.RECENT_PROJECT_LEAF_RECENT);
   });
 });
 
@@ -389,9 +427,24 @@ describe("VIEW_ITEM constants", () => {
   });
 
   // Issue #103, FR-4: new leaf-only token for Workspace Folders rows,
-  // mirroring RECENT_PROJECT_LEAF's precedent ("recentProjectLeaf").
+  // mirroring the (now-split, see below) Recent-Projects leaf token
+  // precedent.
   it("has the WORKSPACE_FOLDER_LEAF token for Workspace Folders rows (issue #103, FR-4)", () => {
     expect(VIEW_ITEM.WORKSPACE_FOLDER_LEAF).toBe("workspaceFolderLeaf");
+  });
+
+  // FR-9/FR-10 (2026-08-16 sidebar-rename-delete-bulk-select spec): the
+  // single RECENT_PROJECT_LEAF token issue #79 introduced is replaced by two
+  // mutually exclusive sibling tokens, one per FolderEntry.source variant —
+  // see the "RecentProjectsProvider — leaf contextValue" describe block
+  // above for the per-source construction tests.
+  it("has the two split RECENT_PROJECT_LEAF_CONFIGURED / RECENT_PROJECT_LEAF_RECENT tokens, and no longer the old combined token (FR-9/FR-10)", () => {
+    expect(VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED).toBe("recentProjectLeaf.configured");
+    expect(VIEW_ITEM.RECENT_PROJECT_LEAF_RECENT).toBe("recentProjectLeaf.recent");
+    expect(
+      Object.values(VIEW_ITEM),
+      "the old un-split 'recentProjectLeaf' token must no longer be present"
+    ).not.toContain("recentProjectLeaf");
   });
 });
 
@@ -625,5 +678,262 @@ describe("ActiveSessionsProvider favorited contextValue", () => {
 
     const groupsAfter = provider.getChildren();
     expect(groupsAfter[0].contextValue).toBe(VIEW_ITEM.PROJECT_ROOT_FAVORITED);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Alias-aware label rendering (FR-3)
+//
+// Every render site that currently computes a folder's display name from
+// path.basename(...) must look up getFolderAlias(folderPath) first and fall
+// back to the existing basename when unset. Covers the five FR-3 sites that
+// live in this file: ActiveGroupItem, ActiveSessionItem, RecentGroupItem,
+// RecentProjectItem, FavoriteLeafItem. (The other two FR-3 sites —
+// quickPick.ts's active-session and folder quick-pick item labels — are out
+// of scope for this file.)
+// ---------------------------------------------------------------------------
+
+describe("Alias-aware label rendering (FR-3)", () => {
+  const root = "/home/user/my-project";
+
+  beforeEach(() => {
+    vi.mocked(getFolderAlias).mockReset();
+    vi.mocked(getAllFolders).mockResolvedValue([]);
+  });
+
+  function makeRealMemento(): import("vscode").Memento {
+    const data: Record<string, unknown> = {};
+    return {
+      keys: () => Object.keys(data),
+      get: <T>(k: string) => data[k] as T | undefined,
+      update: async (k: string, v: unknown) => { data[k] = v; },
+    } as unknown as import("vscode").Memento;
+  }
+
+  describe("ActiveGroupItem", () => {
+    it("uses the configured alias for the group root instead of the basename", () => {
+      vi.mocked(getFolderAlias).mockImplementation((p: string) => (p === root ? "My Alias" : undefined));
+      const provider = new ActiveSessionsProvider(
+        makeSessionManager([makeSession(root)]) as never,
+        makeFakeFavoritesStore()
+      );
+
+      const [group] = provider.getChildren(undefined);
+
+      expect(group.label).toBe("My Alias");
+    });
+
+    it("falls back to the basename when no alias is configured for the group root", () => {
+      vi.mocked(getFolderAlias).mockReturnValue(undefined);
+      const provider = new ActiveSessionsProvider(
+        makeSessionManager([makeSession(root)]) as never,
+        makeFakeFavoritesStore()
+      );
+
+      const [group] = provider.getChildren(undefined);
+
+      expect(group.label).toBe("my-project");
+    });
+  });
+
+  describe("ActiveSessionItem", () => {
+    it("uses the configured alias for the session's folder instead of session.folderName", () => {
+      vi.mocked(getFolderAlias).mockImplementation((p: string) => (p === root ? "Session Alias" : undefined));
+      const provider = new ActiveSessionsProvider(
+        makeSessionManager([makeSession(root)]) as never,
+        makeFakeFavoritesStore()
+      );
+
+      const [group] = provider.getChildren(undefined);
+      const [leaf] = provider.getChildren(group);
+
+      expect(leaf.label).toBe("Session Alias");
+    });
+
+    it("falls back to session.folderName (the basename) when no alias is configured", () => {
+      vi.mocked(getFolderAlias).mockReturnValue(undefined);
+      const provider = new ActiveSessionsProvider(
+        makeSessionManager([makeSession(root)]) as never,
+        makeFakeFavoritesStore()
+      );
+
+      const [group] = provider.getChildren(undefined);
+      const [leaf] = provider.getChildren(group);
+
+      expect(leaf.label).toBe("my-project");
+    });
+  });
+
+  describe("RecentGroupItem", () => {
+    it("uses the configured alias for the group root instead of the basename", async () => {
+      vi.mocked(getFolderAlias).mockImplementation((p: string) => (p === root ? "Recent Alias" : undefined));
+      vi.mocked(getAllFolders).mockResolvedValue([makeFolder(root)]);
+      const provider = new RecentProjectsProvider(
+        makeSessionManager([]) as never,
+        makeFakeFavoritesStore(),
+        makeFakeExistenceCache()
+      );
+
+      const [group] = await provider.getChildren(undefined);
+
+      expect(group.label).toBe("Recent Alias");
+    });
+
+    it("falls back to the basename when no alias is configured for the group root", async () => {
+      vi.mocked(getFolderAlias).mockReturnValue(undefined);
+      vi.mocked(getAllFolders).mockResolvedValue([makeFolder(root)]);
+      const provider = new RecentProjectsProvider(
+        makeSessionManager([]) as never,
+        makeFakeFavoritesStore(),
+        makeFakeExistenceCache()
+      );
+
+      const [group] = await provider.getChildren(undefined);
+
+      expect(group.label).toBe("my-project");
+    });
+  });
+
+  describe("RecentProjectItem", () => {
+    it("uses the configured alias for the folder instead of entry.name", async () => {
+      vi.mocked(getFolderAlias).mockImplementation((p: string) => (p === root ? "Leaf Alias" : undefined));
+      vi.mocked(getAllFolders).mockResolvedValue([makeFolder(root)]);
+      const provider = new RecentProjectsProvider(
+        makeSessionManager([]) as never,
+        makeFakeFavoritesStore(),
+        makeFakeExistenceCache()
+      );
+
+      const [group] = await provider.getChildren(undefined);
+      const [leaf] = await provider.getChildren(group);
+
+      expect(leaf.label).toBe("Leaf Alias");
+    });
+
+    it("falls back to entry.name (the basename) when no alias is configured", async () => {
+      vi.mocked(getFolderAlias).mockReturnValue(undefined);
+      vi.mocked(getAllFolders).mockResolvedValue([makeFolder(root)]);
+      const provider = new RecentProjectsProvider(
+        makeSessionManager([]) as never,
+        makeFakeFavoritesStore(),
+        makeFakeExistenceCache()
+      );
+
+      const [group] = await provider.getChildren(undefined);
+      const [leaf] = await provider.getChildren(group);
+
+      expect(leaf.label).toBe("my-project");
+    });
+  });
+
+  describe("FavoriteLeafItem", () => {
+    const folderPath = "C:/proj";
+
+    it("uses the configured alias instead of the basename", async () => {
+      vi.mocked(getFolderAlias).mockImplementation((p: string) => (p === folderPath ? "Fav Alias" : undefined));
+      const store = new FavoritesStore(makeRealMemento());
+      await store.add(folderPath);
+      const cache = new PathExistenceCache();
+      cache.markPresent(folderPath);
+      const provider = new FavoritesProvider(store, cache);
+
+      const [row] = await provider.getChildren();
+
+      expect(row.label).toBe("Fav Alias");
+    });
+
+    it("falls back to the basename when no alias is configured", async () => {
+      vi.mocked(getFolderAlias).mockReturnValue(undefined);
+      const store = new FavoritesStore(makeRealMemento());
+      await store.add(folderPath);
+      const cache = new PathExistenceCache();
+      cache.markPresent(folderPath);
+      const provider = new FavoritesProvider(store, cache);
+
+      const [row] = await provider.getChildren();
+
+      expect(row.label).toBe("proj");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reactive re-render on claudeConductor.folderAliases config change (FR-5)
+//
+// ActiveSessionsProvider and RecentProjectsProvider additionally subscribe
+// to vscode.workspace.onDidChangeConfiguration, firing _onDidChangeTreeData
+// when e.affectsConfiguration("claudeConductor.folderAliases") is true — no
+// existing test in this file exercised that event before this change (only
+// sessionManager.onDidChangeSessions / favoritesStore.onDidChange /
+// existenceCache.onDidChange were covered).
+// ---------------------------------------------------------------------------
+
+describe("Reactive re-render on claudeConductor.folderAliases config change (FR-5)", () => {
+  beforeEach(() => {
+    vi.mocked(workspace.onDidChangeConfiguration).mockClear();
+  });
+
+  /** Returns the listener registered by the most recently constructed provider. */
+  function lastConfigChangeListener(): (e: { affectsConfiguration: (section: string) => boolean }) => void {
+    const calls = vi.mocked(workspace.onDidChangeConfiguration).mock.calls;
+    const last = calls[calls.length - 1];
+    if (!last) throw new Error("onDidChangeConfiguration listener was not registered");
+    return last[0] as (e: { affectsConfiguration: (section: string) => boolean }) => void;
+  }
+
+  it("ActiveSessionsProvider subscribes to onDidChangeConfiguration and fires its tree-data event when claudeConductor.folderAliases changes", () => {
+    const provider = new ActiveSessionsProvider(makeSessionManager([]) as never, makeFakeFavoritesStore());
+    let fired = 0;
+    provider.onDidChangeTreeData(() => fired++);
+
+    lastConfigChangeListener()({
+      affectsConfiguration: (section) => section === "claudeConductor.folderAliases",
+    });
+
+    expect(fired).toBe(1);
+  });
+
+  it("ActiveSessionsProvider does NOT fire its tree-data event for an unrelated configuration change", () => {
+    const provider = new ActiveSessionsProvider(makeSessionManager([]) as never, makeFakeFavoritesStore());
+    let fired = 0;
+    provider.onDidChangeTreeData(() => fired++);
+
+    lastConfigChangeListener()({
+      affectsConfiguration: (section) => section === "claudeConductor.claudeCommand",
+    });
+
+    expect(fired).toBe(0);
+  });
+
+  it("RecentProjectsProvider subscribes to onDidChangeConfiguration and fires its tree-data event when claudeConductor.folderAliases changes", () => {
+    const provider = new RecentProjectsProvider(
+      makeSessionManager([]) as never,
+      makeFakeFavoritesStore(),
+      makeFakeExistenceCache()
+    );
+    let fired = 0;
+    provider.onDidChangeTreeData(() => fired++);
+
+    lastConfigChangeListener()({
+      affectsConfiguration: (section) => section === "claudeConductor.folderAliases",
+    });
+
+    expect(fired).toBe(1);
+  });
+
+  it("RecentProjectsProvider does NOT fire its tree-data event for an unrelated configuration change", () => {
+    const provider = new RecentProjectsProvider(
+      makeSessionManager([]) as never,
+      makeFakeFavoritesStore(),
+      makeFakeExistenceCache()
+    );
+    let fired = 0;
+    provider.onDidChangeTreeData(() => fired++);
+
+    lastConfigChangeListener()({
+      affectsConfiguration: (section) => section === "claudeConductor.claudeCommand",
+    });
+
+    expect(fired).toBe(0);
   });
 });
