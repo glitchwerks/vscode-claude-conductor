@@ -116,8 +116,14 @@ export class SessionManager implements vscode.Disposable {
     if (getReuseTerminal()) {
       const existing = this._findSessionByFolder(normalized);
       if (existing) {
-        this.focusSession(existing);
-        return { ok: true, reused: true };
+        const isLiveTerminal = vscode.window.terminals.includes(existing.terminal);
+        if (isLiveTerminal && existing.terminal.exitStatus === undefined) {
+          this.focusSession(existing);
+          return { ok: true, reused: true };
+        }
+
+        log(`[launch] replacing stale terminal for cwd: ${normalized}`);
+        this._removeByKey(existing.terminal);
       }
     }
 

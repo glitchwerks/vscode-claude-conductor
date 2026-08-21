@@ -262,12 +262,22 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     const folderPath = isFolder ? uri.fsPath : path.dirname(uri.fsPath);
-    const result = await sessionManager.launchSession(folderPath);
-    if (result.ok) {
-      existenceCache.markPresent(folderPath);
-    } else if (result.reason === "missing") {
-      existenceCache.markMissing(folderPath);
-      void vscode.window.showErrorMessage(result.message);
+    try {
+      const result = await sessionManager.launchSession(folderPath);
+      if (result.ok) {
+        existenceCache.markPresent(folderPath);
+      } else {
+        if (result.reason === "missing") {
+          existenceCache.markMissing(folderPath);
+        }
+        void vscode.window.showErrorMessage(result.message);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`Open Claude Here launch failed: ${message}`);
+      void vscode.window.showErrorMessage(
+        `Unable to open Claude here: ${message}`
+      );
     }
   }
 
