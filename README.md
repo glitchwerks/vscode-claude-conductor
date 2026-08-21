@@ -147,6 +147,10 @@ To remove the hooks at any time: run `Claude Conductor: Remove Notification Hook
 
 - **Configured-folder dedup:** when the same path appears in both VS Code's recent folders and `claudeConductor.extraFolders`, Recent Projects keeps the VS Code recent-folder source during deduplication. The row therefore hides **Remove from Recent Projects**, even though the path also remains in `extraFolders`; remove it through Settings instead.
 
+### Known Limits — Rename
+
+- **Open terminal titles:** renaming a folder's alias does not update terminal tabs that are already open because VS Code's `Terminal.name` property is read-only. The new alias appears in terminal titles the next time that folder's session is launched; existing tabs keep their old title until closed and relaunched.
+
 ## Contributing / Development
 
 ### Testing

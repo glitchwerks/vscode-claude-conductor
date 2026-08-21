@@ -936,4 +936,31 @@ describe("Reactive re-render on claudeConductor.folderAliases config change (FR-
 
     expect(fired).toBe(0);
   });
+
+  it("FavoritesProvider subscribes to onDidChangeConfiguration and fires its tree-data event when claudeConductor.folderAliases changes", () => {
+    const provider = new FavoritesProvider(makeFakeFavoritesStore(), makeFakeExistenceCache());
+    let fired = 0;
+    provider.onDidChangeTreeData(() => fired++);
+
+    lastConfigChangeListener()({
+      affectsConfiguration: (section) => section === "claudeConductor.folderAliases",
+    });
+
+    expect(
+      fired,
+      "FavoritesProvider must subscribe to vscode.workspace.onDidChangeConfiguration and fire _onDidChangeTreeData when claudeConductor.folderAliases changes, the same way ActiveSessionsProvider and RecentProjectsProvider already do — otherwise a Favorites row's displayed alias goes stale until an unrelated store/cache change happens to trigger a refresh"
+    ).toBe(1);
+  });
+
+  it("FavoritesProvider does NOT fire its tree-data event for an unrelated configuration change", () => {
+    const provider = new FavoritesProvider(makeFakeFavoritesStore(), makeFakeExistenceCache());
+    let fired = 0;
+    provider.onDidChangeTreeData(() => fired++);
+
+    lastConfigChangeListener()({
+      affectsConfiguration: (section) => section === "claudeConductor.claudeCommand",
+    });
+
+    expect(fired).toBe(0);
+  });
 });

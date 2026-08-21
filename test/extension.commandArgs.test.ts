@@ -615,6 +615,33 @@ describe("claudeConductor.removeFolder — two-argument multi-select contract wi
     expect(removeExtraFolder).toHaveBeenCalledWith("C:/proj-b");
   });
 
+  it("single-item invocation does NOT remove a folder whose tree item is sourced from RECENT_PROJECT_LEAF_RECENT (FR-14)", async () => {
+    const context = makeContext();
+    activate(context);
+    const handler = capturedMultiArgCommand("claudeConductor.removeFolder");
+
+    // A recents-sourced row — e.g. the user right-clicked (or ran the
+    // command on) a single tree item backed by VS Code's own recents list
+    // rather than a user-configured `claudeConductor.extraFolders` entry.
+    // The multi-select branch already re-checks contextValue per item
+    // (see the test above); the single-item branch (no `selected` array,
+    // or a `selected` array of length <= 1) must apply the same guard —
+    // removeExtraFolder must never be called for a RECENT_PROJECT_LEAF_RECENT
+    // item, even though its folderPath happens to also be present in
+    // claudeConductor.extraFolders.
+    const recentItem = {
+      folderPath: "C:/proj-recent",
+      contextValue: VIEW_ITEM.RECENT_PROJECT_LEAF_RECENT,
+    };
+
+    await handler(recentItem);
+
+    expect(
+      removeExtraFolder,
+      "the single-item claudeConductor.removeFolder path must validate contextValue === RECENT_PROJECT_LEAF_CONFIGURED before calling removeExtraFolder, matching the guard the multi-select branch already applies (FR-14, Decision 1 of docs/specs/2026-08-16-sidebar-rename-delete-bulk-select.md: recents-sourced rows are not removable via this command)"
+    ).not.toHaveBeenCalled();
+  });
+
   it("defensively filters out selected items whose contextValue is not RECENT_PROJECT_LEAF_CONFIGURED, even inside a multi-selection (FR-14)", async () => {
     const context = makeContext();
     activate(context);

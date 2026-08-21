@@ -395,8 +395,9 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      const treeItem = arg as { contextValue?: unknown };
       const folderPath = resolvePathArg(arg);
-      if (folderPath) {
+      if (treeItem?.contextValue === VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED && folderPath) {
         await removeExtraFolder(folderPath);
       }
     }),

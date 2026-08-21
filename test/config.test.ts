@@ -273,13 +273,7 @@ describe("removeExtraFolder (FR-10)", () => {
 
     await removeExtraFolder("C:/not-in-list");
 
-    // Either config.update is never invoked, or it is invoked with the
-    // array unchanged — either way, the stored extraFolders content must be
-    // identical to what it was before the call (unrelated entries preserved).
     expect(store.extraFolders).toEqual(["C:/proj-a", "C:/proj-b"]);
-    if (updateMock.mock.calls.length > 0) {
-      const lastCall = updateMock.mock.calls[updateMock.mock.calls.length - 1];
-      expect(lastCall[1]).toEqual(["C:/proj-a", "C:/proj-b"]);
-    }
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });

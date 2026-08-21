@@ -406,6 +406,11 @@ export class FavoritesProvider implements vscode.TreeDataProvider<FavoriteTreeNo
   ) {
     store.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
     cache.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("claudeConductor.folderAliases")) {
+        this._onDidChangeTreeData.fire(undefined);
+      }
+    });
   }
 
   getTreeItem(el: FavoriteTreeNode): vscode.TreeItem { return el; }
