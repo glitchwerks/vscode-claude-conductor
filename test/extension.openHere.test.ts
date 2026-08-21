@@ -234,6 +234,29 @@ describe("claudeConductor.openHere / openHereFromFile (issue #107)", () => {
     });
   });
 
+  describe("launch failures", () => {
+    it("shows the launch message when launchSession returns reason other", async () => {
+      vi.spyOn(SessionManager.prototype, "launchSession").mockResolvedValue({
+        ok: false,
+        reason: "other",
+        message: "Unable to create the terminal",
+      });
+      mockStat(vscodeMock.FileType.Directory);
+      vi.mocked(vscodeMock.window.showErrorMessage).mockClear();
+
+      const context = makeContext();
+      activate(context);
+
+      const uri = makeUri("C:/Users/chris/flaky-project");
+      const handler = capturedCommand("claudeConductor.openHere");
+      await handler(uri);
+
+      expect(vscodeMock.window.showErrorMessage).toHaveBeenCalledWith(
+        "Unable to create the terminal"
+      );
+    });
+  });
+
   describe("stale-target guard via vscode.workspace.fs.stat(uri) (FR-6/Risk 2)", () => {
     it("claudeConductor.openHere shows an error and does not launch when stat(uri) rejects", async () => {
       const launchSpy = vi

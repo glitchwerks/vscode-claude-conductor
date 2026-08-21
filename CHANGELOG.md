@@ -11,6 +11,7 @@ All notable changes to the Claude Conductor extension are documented here.
 
 ### Fixed
 
+- **"Open Claude Here" no longer silently does nothing when launch fails** — exited terminals and tracked terminals missing from VS Code's live terminal list are no longer reused during close-event races, and both rejected launches and unsuccessful launch results now show an error. Fixes #138.
 - **Claude session hooks now recover reliably after extension updates** — self-healing verifies that the recorded hook script still exists, retries when a VS Code window regains focus, surfaces persistent failures through the output channel, prompts for a reload when the running host is stale, and guards concurrent settings rewrites with a short-lived lockfile. Fixes #128.
 
 ## [1.4.1] — 2026-08-09
