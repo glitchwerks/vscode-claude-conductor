@@ -24,7 +24,7 @@ skills_relevant:
 
 **Type:** feature-spec
 
-**Status:** DRAFT — not yet reviewed by a human.
+**Status:** ACCEPTED — the repo owner confirmed § 5 Open Question 1 (launch-time-only tab-title aliasing accepted as a reading of issue #80's Acceptance Criteria); implementation is complete, verified against all four CI gates (lint, typecheck, test, compile).
 
 **Prior inputs consumed (not re-derived):**
 - `docs/research/2026-07-29-vscode-claude-conductor-landscape-survey.md` § finding 4 (`ShahadIshraq/claude-session-vs-code-extension`) — the competing-extension motivation cited in issue #80's own Context section, re-verified below rather than re-derived.
@@ -581,8 +581,8 @@ command extensions.
   curation-pressure argument doesn't apply. No cap is enforced.
 - **Retroactively updating an already-open terminal's tab title.** FR-4
   substitutes the alias only at launch time; see § 4 Risks and § 5 Open
-  Question 1 for the constraint this follows from and the confirmation this
-  spec is requesting on it.
+  Question 1 for the constraint this follows from and the confirmation the
+  repo owner gave on it.
 
 ## 4. Risks
 
@@ -619,7 +619,7 @@ command extensions.
 
 ## 5. Open questions
 
-1. ⚠️ **Confirmation needed — is launch-time-only tab-title aliasing an
+1. ✅ **ANSWERED — is launch-time-only tab-title aliasing an
    acceptable reading of issue #80's Acceptance Criteria?** FR-4 substitutes
    the alias into a session's terminal name only at the moment
    `launchSession()` creates it; VS Code gives no API to rename a `Terminal`
@@ -630,7 +630,7 @@ command extensions.
    wording. This spec's recommendation is to accept that gap (there is no
    alternative that doesn't require an unsupported VS Code capability), but
    the issue author should explicitly confirm before implementation starts,
-   since it is their Acceptance Criteria being narrowed.
+   since it is their Acceptance Criteria being narrowed. **Resolved — the repo owner confirmed this reading directly, choosing to accept and start implementation rather than hold off or request a spec revision; FR-4 ships launch-time-only as written, and implementation is now complete and verified against all four CI gates (lint, typecheck, test, compile).**
 
 Decision 1 (recents-sourced delete behavior, FR-7/FR-8) and Decision 2
 (alias-storage location, FR-2) — the two decision points issue #80 itself

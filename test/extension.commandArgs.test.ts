@@ -40,15 +40,35 @@ vi.mock("../src/folderSource", () => ({
   getAllFolders: vi.fn(),
 }));
 
+// FR-14: claudeConductor.removeFolder's handler goes through config.ts's
+// removeExtraFolder helper — mock the whole module so the assertions below
+// observe exactly which folder(s) the handler resolved and passed through,
+// without depending on a real vscode.workspace.getConfiguration round-trip
+// (that round-trip is covered separately by test/config.test.ts).
+vi.mock("../src/config", () => ({
+  getFolderAliases: vi.fn(),
+  getFolderAlias: vi.fn(),
+  setFolderAlias: vi.fn(),
+  removeFolderAlias: vi.fn(),
+  removeExtraFolder: vi.fn(),
+  getClaudeCommand: vi.fn(),
+  getReuseTerminal: vi.fn(),
+  getEnableNotifications: vi.fn(),
+  getExtraFolders: vi.fn(),
+  getLaunchDelayMs: vi.fn(),
+  getDebugLogging: vi.fn(),
+}));
+
 import * as vscodeMock from "./mocks/vscode";
 import { activate } from "../src/extension";
 import { FavoritesStore } from "../src/favoritesStore";
 import type { FavoritesStore as FavoritesStoreType } from "../src/favoritesStore";
 import { SessionManager } from "../src/sessionManager";
 import type { ActiveSession } from "../src/sessionManager";
-import { ActiveSessionsProvider, RecentProjectsProvider } from "../src/treeView";
+import { ActiveSessionsProvider, RecentProjectsProvider, VIEW_ITEM } from "../src/treeView";
 import { getAllFolders } from "../src/folderSource";
 import type { FolderEntry } from "../src/folderSource";
+import { removeExtraFolder } from "../src/config";
 import { PathExistenceCache } from "../src/pathExistenceCache";
 import type { PathExistenceCache as PathExistenceCacheType } from "../src/pathExistenceCache";
 
@@ -89,6 +109,21 @@ function capturedCommand(name: string): (arg?: unknown) => unknown {
   const last = matches[matches.length - 1];
   if (!last) throw new Error(`command not registered: ${name}`);
   return last[1] as (arg?: unknown) => unknown;
+}
+
+/**
+ * Same lookup as {@link capturedCommand}, but typed for the two-argument
+ * multi-select contract (FR-12): the first argument is the tree item the
+ * command was executed on, the second is the array of every selected item.
+ */
+function capturedMultiArgCommand(
+  name: string
+): (arg?: unknown, selected?: unknown) => unknown {
+  const calls = vi.mocked(vscodeMock.commands.registerCommand).mock.calls;
+  const matches = calls.filter((c) => c[0] === name);
+  const last = matches[matches.length - 1];
+  if (!last) throw new Error(`command not registered: ${name}`);
+  return last[1] as (arg?: unknown, selected?: unknown) => unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,5 +471,200 @@ describe("claudeConductor.launchInWorkspaceFolder — QuickPick → launchSessio
     ).toHaveBeenCalled();
     expect(vscodeMock.window.showQuickPick).not.toHaveBeenCalled();
     expect(launchSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR-12/FR-13: claudeConductor.closeSession — two-argument multi-select
+// contract. No VS Code UI selection state needs to be simulated —
+// TreeViewStub (test/mocks/vscode.ts) does not model live selection — a
+// constructed two-argument call is sufficient, matching how
+// openClaudeHere(uri, uris, isFolder)'s `uris` argument is already tested
+// elsewhere in this file.
+// ---------------------------------------------------------------------------
+
+describe("claudeConductor.closeSession — two-argument multi-select contract (FR-12, FR-13)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([]);
+    vi.mocked(fs.mkdirSync).mockReturnValue(undefined as unknown as string);
+    (vscodeMock.window as unknown as { terminals: unknown[] }).terminals = [];
+    (vscodeMock.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders =
+      undefined;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("with only a single-argument invocation (no selected-items array), closes just that one session — unchanged single-item behavior", async () => {
+    const closeSpy = vi
+      .spyOn(SessionManager.prototype, "closeSession")
+      .mockImplementation(() => {});
+    const context = makeContext();
+    activate(context);
+    const handler = capturedMultiArgCommand("claudeConductor.closeSession");
+
+    const session = makeActiveSession("C:/proj-solo");
+    const item = { session };
+
+    await handler(item);
+
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect(closeSpy).toHaveBeenCalledWith(session);
+  });
+
+  it("with a selected-items array of length 1, falls back to today's single-argument behavior", async () => {
+    const closeSpy = vi
+      .spyOn(SessionManager.prototype, "closeSession")
+      .mockImplementation(() => {});
+    const context = makeContext();
+    activate(context);
+    const handler = capturedMultiArgCommand("claudeConductor.closeSession");
+
+    const session = makeActiveSession("C:/proj-a");
+    const item = { session };
+
+    await handler(item, [item]);
+
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect(closeSpy).toHaveBeenCalledWith(session);
+  });
+
+  it("with a selected-items array of length > 1, resolves and closes every selected session (FR-13)", async () => {
+    const closeSpy = vi
+      .spyOn(SessionManager.prototype, "closeSession")
+      .mockImplementation(() => {});
+    const context = makeContext();
+    activate(context);
+    const handler = capturedMultiArgCommand("claudeConductor.closeSession");
+
+    const sessionA = makeActiveSession("C:/proj-a");
+    const sessionB = makeActiveSession("C:/proj-b");
+    const itemA = { session: sessionA };
+    const itemB = { session: sessionB };
+
+    await handler(itemA, [itemA, itemB]);
+
+    expect(
+      closeSpy,
+      "closeSession must call sessionManager.closeSession(...) once per resolved selected session when the selection array has more than one element (FR-13)"
+    ).toHaveBeenCalledTimes(2);
+    expect(closeSpy).toHaveBeenCalledWith(sessionA);
+    expect(closeSpy).toHaveBeenCalledWith(sessionB);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR-12/FR-14: claudeConductor.removeFolder — two-argument multi-select
+// contract, plus the defensive contextValue-based filter (FR-14).
+// ---------------------------------------------------------------------------
+
+describe("claudeConductor.removeFolder — two-argument multi-select contract with defensive contextValue filter (FR-12, FR-14)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([]);
+    vi.mocked(fs.mkdirSync).mockReturnValue(undefined as unknown as string);
+    (vscodeMock.window as unknown as { terminals: unknown[] }).terminals = [];
+    (vscodeMock.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders =
+      undefined;
+    vi.mocked(removeExtraFolder).mockReset();
+    vi.mocked(removeExtraFolder).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("with only a single-argument invocation, removes that one folder via removeExtraFolder", async () => {
+    const context = makeContext();
+    activate(context);
+    const handler = capturedMultiArgCommand("claudeConductor.removeFolder");
+
+    const item = {
+      folderPath: "C:/proj-a",
+      contextValue: VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED,
+    };
+
+    await handler(item);
+
+    expect(removeExtraFolder).toHaveBeenCalledTimes(1);
+    expect(removeExtraFolder).toHaveBeenCalledWith("C:/proj-a");
+  });
+
+  it("with a selected-items array of length > 1, resolves and removes every selected item's folder (FR-14)", async () => {
+    const context = makeContext();
+    activate(context);
+    const handler = capturedMultiArgCommand("claudeConductor.removeFolder");
+
+    const itemA = {
+      folderPath: "C:/proj-a",
+      contextValue: VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED,
+    };
+    const itemB = {
+      folderPath: "C:/proj-b",
+      contextValue: VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED,
+    };
+
+    await handler(itemA, [itemA, itemB]);
+
+    expect(removeExtraFolder).toHaveBeenCalledTimes(2);
+    expect(removeExtraFolder).toHaveBeenCalledWith("C:/proj-a");
+    expect(removeExtraFolder).toHaveBeenCalledWith("C:/proj-b");
+  });
+
+  it("single-item invocation does NOT remove a folder whose tree item is sourced from RECENT_PROJECT_LEAF_RECENT (FR-14)", async () => {
+    const context = makeContext();
+    activate(context);
+    const handler = capturedMultiArgCommand("claudeConductor.removeFolder");
+
+    // A recents-sourced row — e.g. the user right-clicked (or ran the
+    // command on) a single tree item backed by VS Code's own recents list
+    // rather than a user-configured `claudeConductor.extraFolders` entry.
+    // The multi-select branch already re-checks contextValue per item
+    // (see the test above); the single-item branch (no `selected` array,
+    // or a `selected` array of length <= 1) must apply the same guard —
+    // removeExtraFolder must never be called for a RECENT_PROJECT_LEAF_RECENT
+    // item, even though its folderPath happens to also be present in
+    // claudeConductor.extraFolders.
+    const recentItem = {
+      folderPath: "C:/proj-recent",
+      contextValue: VIEW_ITEM.RECENT_PROJECT_LEAF_RECENT,
+    };
+
+    await handler(recentItem);
+
+    expect(
+      removeExtraFolder,
+      "the single-item claudeConductor.removeFolder path must validate contextValue === RECENT_PROJECT_LEAF_CONFIGURED before calling removeExtraFolder, matching the guard the multi-select branch already applies (FR-14, Decision 1 of docs/specs/2026-08-16-sidebar-rename-delete-bulk-select.md: recents-sourced rows are not removable via this command)"
+    ).not.toHaveBeenCalled();
+  });
+
+  it("defensively filters out selected items whose contextValue is not RECENT_PROJECT_LEAF_CONFIGURED, even inside a multi-selection (FR-14)", async () => {
+    const context = makeContext();
+    activate(context);
+    const handler = capturedMultiArgCommand("claudeConductor.removeFolder");
+
+    const configured = {
+      folderPath: "C:/proj-configured",
+      contextValue: VIEW_ITEM.RECENT_PROJECT_LEAF_CONFIGURED,
+    };
+    // A recents-sourced row swept into a ctrl-click multi-selection anchored
+    // on a configured-sourced row — FR-14's re-check-per-item requirement.
+    const recent = {
+      folderPath: "C:/proj-recent",
+      contextValue: VIEW_ITEM.RECENT_PROJECT_LEAF_RECENT,
+    };
+
+    await handler(configured, [configured, recent]);
+
+    expect(
+      removeExtraFolder,
+      "removeFolder must re-check each selected item's own contextValue (not just the primary/anchor item's) before acting on it — VS Code's view/item/context visibility is evaluated per right-clicked item, not guaranteed across a heterogeneous multi-selection (FR-14)"
+    ).toHaveBeenCalledTimes(1);
+    expect(removeExtraFolder).toHaveBeenCalledWith("C:/proj-configured");
+    expect(removeExtraFolder).not.toHaveBeenCalledWith("C:/proj-recent");
   });
 });

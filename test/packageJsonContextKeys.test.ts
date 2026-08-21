@@ -50,6 +50,10 @@ const NEGATIVE_FIXTURES = [
   "recentProject",              // legacy un-migrated value — should NOT match the migrated regex
   "xyzactiveSession",
   "activeSessionFoo",
+  "recentProjectLeaf",          // pre-FR-10-migration bare token — the widened
+                                 // openSession/renameFolder regexes must match
+                                 // only the two dotted "recentProjectLeaf.*"
+                                 // variants, not the un-suffixed legacy value.
 ];
 
 describe("package.json viewItem ↔ VIEW_ITEM bidirectional bijection", () => {
@@ -139,7 +143,13 @@ describe("package.json viewItem ↔ VIEW_ITEM bidirectional bijection", () => {
   // this change and are not asserted on here.
   // -------------------------------------------------------------------------
   describe("issue #79 — Launch Session must target the Recent-Projects leaf row, not the group row", () => {
-    const RECENT_PROJECT_LEAF = "recentProjectLeaf";
+    // FR-9/FR-10 (2026-08-16 sidebar-rename-delete-bulk-select spec) split
+    // the single "recentProjectLeaf" token issue #79 introduced into two
+    // mutually exclusive sibling tokens, one per FolderEntry.source variant
+    // — see that spec's "Test-migration note and full blast radius" for the
+    // full classification of every recentProjectLeaf occurrence this repo.
+    const RECENT_PROJECT_LEAF_CONFIGURED = "recentProjectLeaf.configured";
+    const RECENT_PROJECT_LEAF_RECENT = "recentProjectLeaf.recent";
 
     const openSessionClauses = clauses.filter(
       (c) => c.command === "claudeConductor.openSession" && c.when
@@ -203,28 +213,159 @@ describe("package.json viewItem ↔ VIEW_ITEM bidirectional bijection", () => {
       ).toBe(true);
     });
 
-    it("an openSession clause scoped to the recentProjects view matches the new leaf-only token", () => {
-      const matchesLeafToken = recentProjectsOpenSessionClauses.some((c) => {
+    it("an openSession clause scoped to the recentProjects view matches both new leaf-only tokens (FR-9/FR-10)", () => {
+      for (const token of [RECENT_PROJECT_LEAF_CONFIGURED, RECENT_PROJECT_LEAF_RECENT]) {
+        const matchesToken = recentProjectsOpenSessionClauses.some((c) => {
+          const when = c.when ?? "";
+          const literals = extractEqLiterals(when);
+          const regexes = extractRegexes(when);
+          return literals.includes(token) || regexes.some((re) => re.test(token));
+        });
+
+        expect(
+          matchesToken,
+          `no openSession clause scoped to the recentProjects view matches the leaf-only token '${token}' — the openSession when-clause must widen to a regex matching both the 'configured' and 'recent' source variants (FR-10)`
+        ).toBe(true);
+      }
+    });
+
+    it("VIEW_ITEM exposes both new leaf-only tokens (replacing, not adding alongside, the old 'recentProjectLeaf' token) so the bijection detector above can track them (FR-9/FR-10)", () => {
+      expect(
+        VIEW_ITEM_VALUES,
+        `VIEW_ITEM should include '${RECENT_PROJECT_LEAF_CONFIGURED}' and '${RECENT_PROJECT_LEAF_RECENT}' values for the Recent-Projects leaf contextValue split (FR-9) so the bijection tests above cover them`
+      ).toEqual(
+        expect.arrayContaining([RECENT_PROJECT_LEAF_CONFIGURED, RECENT_PROJECT_LEAF_RECENT])
+      );
+      expect(
+        VIEW_ITEM_VALUES,
+        "the old un-split 'recentProjectLeaf' token must no longer be present in VIEW_ITEM — FR-10 replaces it with the two sibling tokens above rather than adding them alongside it"
+      ).not.toContain("recentProjectLeaf");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // FR-6: claudeConductor.renameFolder's view/item/context when-clause.
+  // Purpose-built coverage, outside what the bijection harness above parses
+  // (it only checks that literal/regex tokens reference known VIEW_ITEM
+  // values, not the full boolean shape — including the !listMultiSelection
+  // gate — of a when-clause), matching how the #103 contributes.views
+  // coverage below was added as a separate, purpose-built block (NFR-15(c)).
+  // -------------------------------------------------------------------------
+  describe("claudeConductor.renameFolder — view/item/context when-clause (FR-1, FR-6)", () => {
+    const renameFolderClauses = clauses.filter(
+      (c) => c.command === "claudeConductor.renameFolder"
+    );
+
+    it("a renameFolder clause is contributed to view/item/context", () => {
+      expect(
+        renameFolderClauses.length,
+        "package.json's contributes.menus['view/item/context'] must include a claudeConductor.renameFolder entry (FR-1/FR-6)"
+      ).toBeGreaterThan(0);
+    });
+
+    it("its when-clause is gated by !listMultiSelection (hidden entirely for multi-selections)", () => {
+      for (const c of renameFolderClauses) {
+        expect(
+          c.when ?? "",
+          "renameFolder must be hidden when more than one row is selected, rather than silently acting on only the first — the documented listMultiSelection when-clause context (FR-6)"
+        ).toContain("!listMultiSelection");
+      }
+    });
+
+    it("its when-clause matches activeSession, worktreeChild, and both recentProjectLeaf source variants (FR-6 — Rename has no source restriction, unlike Remove)", () => {
+      for (const c of renameFolderClauses) {
         const when = c.when ?? "";
         const literals = extractEqLiterals(when);
         const regexes = extractRegexes(when);
-        return (
-          literals.includes(RECENT_PROJECT_LEAF) ||
-          regexes.some((re) => re.test(RECENT_PROJECT_LEAF))
-        );
-      });
 
-      expect(
-        matchesLeafToken,
-        `no openSession clause scoped to the recentProjects view matches the assumed leaf-only token '${RECENT_PROJECT_LEAF}' — introduce a distinct contextValue for non-worktree Recent-Projects leaf rows and reference it in the openSession when-clause (issue #79, Option A)`
-      ).toBe(true);
+        for (const token of [
+          "activeSession",
+          "worktreeChild",
+          "recentProjectLeaf.configured",
+          "recentProjectLeaf.recent",
+        ]) {
+          expect(
+            literals.includes(token) || regexes.some((re) => re.test(token)),
+            `renameFolder when-clause '${when}' must match '${token}' (FR-6)`
+          ).toBe(true);
+        }
+      }
     });
 
-    it("VIEW_ITEM exposes the new leaf-only token so the bijection detector above can track it", () => {
+    it("its when-clause does not match projectRoot.* group-row tokens (Rename targets leaves/sessions, not group rows)", () => {
+      for (const c of renameFolderClauses) {
+        const when = c.when ?? "";
+        const literals = extractEqLiterals(when);
+        const regexes = extractRegexes(when);
+        for (const token of [
+          "projectRoot.favorited",
+          "projectRoot.unfavorited",
+          "projectRoot.missing",
+        ]) {
+          expect(
+            literals.includes(token) || regexes.some((re) => re.test(token)),
+            `renameFolder when-clause '${when}' must NOT match group-row token '${token}'`
+          ).toBe(false);
+        }
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // FR-10: claudeConductor.removeFolder's view/item/context when-clause.
+  // -------------------------------------------------------------------------
+  describe("claudeConductor.removeFolder — view/item/context when-clause (FR-10, Decision 1)", () => {
+    const removeFolderClauses = clauses.filter(
+      (c) => c.command === "claudeConductor.removeFolder"
+    );
+
+    it("a removeFolder clause is contributed to view/item/context, scoped to the recentProjects view", () => {
       expect(
-        VIEW_ITEM_VALUES,
-        `VIEW_ITEM should include a '${RECENT_PROJECT_LEAF}' value for the Recent-Projects leaf contextValue (issue #79) so the bijection tests above cover it`
-      ).toContain(RECENT_PROJECT_LEAF);
+        removeFolderClauses.length,
+        "package.json's contributes.menus['view/item/context'] must include a claudeConductor.removeFolder entry (FR-10)"
+      ).toBeGreaterThan(0);
+      for (const c of removeFolderClauses) {
+        expect(c.when ?? "").toContain("claudeConductor.recentProjects");
+      }
+    });
+
+    it("its when-clause matches only the 'configured' source variant, not 'recent' (Decision 1 — hide Remove for VS Code's own recently-opened rows)", () => {
+      const CONFIGURED = "recentProjectLeaf.configured";
+      const RECENT = "recentProjectLeaf.recent";
+
+      for (const c of removeFolderClauses) {
+        const when = c.when ?? "";
+        const literals = extractEqLiterals(when);
+        const regexes = extractRegexes(when);
+
+        const matchesConfigured =
+          literals.includes(CONFIGURED) || regexes.some((re) => re.test(CONFIGURED));
+        expect(
+          matchesConfigured,
+          `removeFolder when-clause '${when}' must match '${CONFIGURED}' (FR-10)`
+        ).toBe(true);
+
+        const matchesRecent =
+          literals.includes(RECENT) || regexes.some((re) => re.test(RECENT));
+        expect(
+          matchesRecent,
+          `removeFolder when-clause '${when}' must NOT match '${RECENT}' — Decision 1 hides Remove for VS Code's own recently-opened rows, since Conductor doesn't own that data (FR-10, FR-7/FR-8)`
+        ).toBe(false);
+      }
+    });
+
+    it("its when-clause does not match worktreeChild or activeSession (Remove is Recent-Projects-configured-leaf-only, unlike Rename)", () => {
+      for (const c of removeFolderClauses) {
+        const when = c.when ?? "";
+        const literals = extractEqLiterals(when);
+        const regexes = extractRegexes(when);
+        for (const token of ["worktreeChild", "activeSession"]) {
+          expect(
+            literals.includes(token) || regexes.some((re) => re.test(token)),
+            `removeFolder when-clause '${when}' must NOT match '${token}'`
+          ).toBe(false);
+        }
+      }
     });
   });
 
@@ -315,6 +456,7 @@ describe("contributes.views — Workspace Folders visibility when-clause (issue 
 interface CommandContribution {
   command?: string;
   title?: string;
+  category?: string;
 }
 
 const pkgCommands = JSON.parse(fs.readFileSync(PKG_PATH, "utf8")) as {
@@ -349,5 +491,39 @@ describe("contributes.commands — claudeConductor.launchInWorkspaceFolder (issu
       hiddenClause,
       "claudeConductor.launchInWorkspaceFolder must not carry a commandPalette when:'false' clause (unlike openHere/openHereFromFile) — NFR-8 requires it stay visible in the command palette"
     ).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR-1, FR-10: claudeConductor.renameFolder and claudeConductor.removeFolder
+// must be contributed to contributes.commands with the exact title/category
+// the spec specifies, mirroring the addFavorite/removeFavorite/locateFavorite
+// command-contribution shape (package.json:89-105).
+// ---------------------------------------------------------------------------
+
+describe("contributes.commands — claudeConductor.renameFolder and claudeConductor.removeFolder (FR-1, FR-10)", () => {
+  const renameFolderCommand = contributedCommands.find(
+    (c) => c.command === "claudeConductor.renameFolder"
+  );
+  const removeFolderCommand = contributedCommands.find(
+    (c) => c.command === "claudeConductor.removeFolder"
+  );
+
+  it("claudeConductor.renameFolder is contributed with title 'Rename...' and category 'Claude Conductor' (FR-1)", () => {
+    expect(
+      renameFolderCommand,
+      "package.json's contributes.commands must include claudeConductor.renameFolder (FR-1)"
+    ).toBeDefined();
+    expect(renameFolderCommand?.title).toBe("Rename...");
+    expect(renameFolderCommand?.category).toBe("Claude Conductor");
+  });
+
+  it("claudeConductor.removeFolder is contributed with title 'Remove from Recent Projects' and category 'Claude Conductor' (FR-10)", () => {
+    expect(
+      removeFolderCommand,
+      "package.json's contributes.commands must include claudeConductor.removeFolder (FR-10)"
+    ).toBeDefined();
+    expect(removeFolderCommand?.title).toBe("Remove from Recent Projects");
+    expect(removeFolderCommand?.category).toBe("Claude Conductor");
   });
 });

@@ -104,6 +104,16 @@
         "category": "Claude Conductor"
       },
       {
+        "command": "claudeConductor.renameFolder",
+        "title": "Rename...",
+        "category": "Claude Conductor"
+      },
+      {
+        "command": "claudeConductor.removeFolder",
+        "title": "Remove from Recent Projects",
+        "category": "Claude Conductor"
+      },
+      {
         "command": "claudeConductor.openHere",
         "title": "Open Claude Here"
       },
@@ -183,7 +193,7 @@
         },
         {
           "command": "claudeConductor.openSession",
-          "when": "view == claudeConductor.recentProjects && viewItem == recentProjectLeaf",
+          "when": "view == claudeConductor.recentProjects && viewItem =~ /^recentProjectLeaf\\.(configured|recent)$/",
           "group": "inline"
         },
         {
@@ -225,6 +235,16 @@
           "command": "claudeConductor.removeFavorite",
           "when": "view =~ /claudeConductor\\.(activeSessions|recentProjects|favorites)/ && viewItem == projectRoot.favorited",
           "group": "favorites@1"
+        },
+        {
+          "command": "claudeConductor.renameFolder",
+          "when": "!listMultiSelection && (viewItem == activeSession || viewItem =~ /^recentProjectLeaf\\.(configured|recent)$/ || viewItem == worktreeChild)",
+          "group": "rename@1"
+        },
+        {
+          "command": "claudeConductor.removeFolder",
+          "when": "view == claudeConductor.recentProjects && viewItem == recentProjectLeaf.configured",
+          "group": "danger@1"
         }
       ],
       "explorer/context": [
@@ -275,6 +295,11 @@
           },
           "default": [],
           "description": "Additional folder paths to show in the session launcher"
+        },
+        "claudeConductor.folderAliases": {
+          "type": "object",
+          "default": {},
+          "description": "Display-name aliases for folders, keyed by canonical folder path"
         },
         "claudeConductor.launchDelayMs": {
           "type": "number",

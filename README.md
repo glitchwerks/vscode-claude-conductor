@@ -23,6 +23,8 @@ A dedicated "Claude Conductor" panel with four sections:
 - **Recent Projects** — your VS Code recently opened folders plus any configured extras, grouped by project root. Click a project row to expand it and see its worktrees. Click a folder leaf to launch a new session.
 - **Workspace Folders** — shown only when a multi-root VS Code workspace is open (more than one root folder), with one row per native workspace folder. Active sessions use the same working/waiting icons as Active Sessions; click a row to launch or focus its session.
 
+Right-click an Active Sessions or Recent Projects folder row and choose **Rename...** (`claudeConductor.renameFolder`) to assign a display alias. The alias is shown in the sidebar and quick-pick immediately and in new terminal tab titles when sessions are launched. For folders added through `claudeConductor.extraFolders`, choose **Remove from Recent Projects** (`claudeConductor.removeFolder`) to remove them. Active Sessions and Recent Projects also support multi-select for closing sessions or removing configured folders in bulk.
+
 ### Favorites
 
 A curated list of project roots you've pinned for quick access. Sits between Active Sessions and Recent Projects.
@@ -86,6 +88,7 @@ Cycles through Claude tabs only, not every terminal or editor tab.
 | `claudeConductor.reuseExistingTerminal` | `true` | Focus an existing session tab instead of opening a duplicate |
 | `claudeConductor.enableNotifications` | `true` | Show notifications when a session is waiting for input |
 | `claudeConductor.extraFolders` | `[]` | Additional folder paths to show in the launcher |
+| `claudeConductor.folderAliases` | `{}` | Display-name aliases for folders, keyed by canonical folder path |
 | `claudeConductor.debugLogging` | `false` | Enable verbose diagnostic logging for session lifecycle (see Debug logging below) |
 
 ### Debug logging
@@ -139,6 +142,14 @@ To remove the hooks at any time: run `Claude Conductor: Remove Notification Hook
 - **Favorites paths are tracked as you typed them.** Two distinct path strings that resolve to the same folder via symlinks or junctions produce duplicate entries.
 - **UNC shares (`\\server\share`):** these render as present in the panel until you actually launch a session. If the share is offline, the launch will fail and the row will dim afterward. The next successful launch flips it back to present.
 - **Multi-window writes:** if you mutate Favorites in two VS Code windows simultaneously, the last write wins. The normal cap is 25 entries, but storage drift can exceed it, and mutation rate is low, so collisions are unlikely in practice. Settings Sync is intentionally not enabled.
+
+### Known Limits — Recent Projects
+
+- **Configured-folder dedup:** when the same path appears in both VS Code's recent folders and `claudeConductor.extraFolders`, Recent Projects keeps the VS Code recent-folder source during deduplication. The row therefore hides **Remove from Recent Projects**, even though the path also remains in `extraFolders`; remove it through Settings instead.
+
+### Known Limits — Rename
+
+- **Open terminal titles:** renaming a folder's alias does not update terminal tabs that are already open because VS Code's `Terminal.name` property is read-only. The new alias appears in terminal titles the next time that folder's session is launched; existing tabs keep their old title until closed and relaunched.
 
 ## Contributing / Development
 

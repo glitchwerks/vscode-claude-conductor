@@ -5,6 +5,7 @@ import * as fs from "fs";
 import { SessionManager } from "./sessionManager";
 import { getAllFolders } from "./folderSource";
 import { PathExistenceCache } from "./pathExistenceCache";
+import { getFolderAlias } from "./config";
 
 interface SessionPickItem extends vscode.QuickPickItem {
   folderPath: string;
@@ -26,7 +27,7 @@ export async function showQuickPick(
 
   for (const session of activeSessions) {
     items.push({
-      label: `$(terminal) ${session.folderName}`,
+      label: `$(terminal) ${getFolderAlias(session.folderPath) ?? session.folderName}`,
       description: path.dirname(session.folderPath),
       detail: "$(pulse) Active session",
       folderPath: session.folderPath,
@@ -40,7 +41,7 @@ export async function showQuickPick(
     }
     const sourceLabel = folder.source === "configured" ? "configured" : "recent";
     items.push({
-      label: `$(folder) ${folder.name}`,
+      label: `$(folder) ${getFolderAlias(folder.folderPath) ?? folder.name}`,
       description: folder.parentDir,
       detail: `$(history) ${sourceLabel}`,
       folderPath: folder.folderPath,
