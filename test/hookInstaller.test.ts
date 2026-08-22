@@ -191,6 +191,229 @@ describe("reconcileHookPaths", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Duplicate hook entry collapsing (issue #140)
+//
+// The live ~/.claude/settings.json this issue was filed against showed
+// duplicate Conductor-owned entries per event, asymmetrically: some events
+// carried both an extension-installed-path entry AND a dev-repo-installed-path
+// entry, one event carried only the dev-repo entry. Root cause: neither
+// hooksUpToDate() nor reconcileHookPaths() ever compared "is this the same
+// logical hook as that other entry" -- reconcileHookPaths only rewrote each
+// matching command's path in place, preserving whatever entry count already
+// existed, so re-running reconcile against pre-existing duplicates just
+// produced byte-identical duplicates instead of collapsing them.
+// ---------------------------------------------------------------------------
+
+import { hooksHaveDuplicateEntries } from "../src/hookInstaller.js";
+
+/** Builds a hooks entry object shaped like installHooks()'s appendHook output. */
+function makeEntry(
+  scriptBase: string,
+  action: string,
+  matcher?: string
+): Record<string, unknown> {
+  const entry: Record<string, unknown> = {
+    hooks: [{ type: "command", command: `${scriptBase} ${action}` }],
+  };
+  if (matcher) {
+    entry.matcher = matcher;
+  }
+  return entry;
+}
+
+/**
+ * Reproduces the exact duplication pattern from the live settings.json this
+ * issue was filed against: UserPromptSubmit and Stop each carry both an
+ * installed-extension-path entry and a dev-repo-path entry; Notification
+ * carries only the dev-repo-path entry (asymmetric across event types --
+ * the key clue that ruled out a simple "always append" bug).
+ */
+function makeDuplicatedSettings(
+  installedPathBase: string,
+  devRepoPathBase: string
+): Record<string, unknown> {
+  return {
+    hooks: {
+      Notification: [makeEntry(devRepoPathBase, "idle", "idle_prompt")],
+      UserPromptSubmit: [
+        makeEntry(installedPathBase, "active"),
+        makeEntry(devRepoPathBase, "active"),
+      ],
+      Stop: [
+        makeEntry(installedPathBase, "stop"),
+        makeEntry(devRepoPathBase, "stop"),
+      ],
+    },
+  };
+}
+
+describe("hooksHaveDuplicateEntries", () => {
+  it("returns false when every event has exactly one Conductor-owned entry", () => {
+    const settings = makeSettingsWithHooks(NEW_SCRIPT_BASE_WIN);
+    expect(hooksHaveDuplicateEntries(settings)).toBe(false);
+  });
+
+  it("returns false for an empty/absent hooks object", () => {
+    expect(hooksHaveDuplicateEntries({})).toBe(false);
+  });
+
+  it("returns true when an event has two entries for the same matcher+action, even under different paths", () => {
+    const settings = makeDuplicatedSettings(OLD_SCRIPT_BASE_WIN, NEW_SCRIPT_BASE_WIN);
+    expect(hooksHaveDuplicateEntries(settings)).toBe(true);
+  });
+
+  it("returns true when duplicate entries already share the identical (current) path", () => {
+    // Simulates duplicates that survived a reconcile pass which rewrote paths
+    // but (pre-fix) never collapsed entry count.
+    const settings = {
+      hooks: {
+        Stop: [
+          makeEntry(NEW_SCRIPT_BASE_WIN, "stop"),
+          makeEntry(NEW_SCRIPT_BASE_WIN, "stop"),
+        ],
+      },
+    };
+    expect(hooksHaveDuplicateEntries(settings)).toBe(true);
+  });
+
+  it("does not flag two different logical hooks (different matcher) sharing an event as duplicates", () => {
+    const settings = {
+      hooks: {
+        Notification: [
+          makeEntry(NEW_SCRIPT_BASE_WIN, "idle", "idle_prompt"),
+          makeEntry(NEW_SCRIPT_BASE_WIN, "idle", "other_matcher"),
+        ],
+      },
+    };
+    expect(hooksHaveDuplicateEntries(settings)).toBe(false);
+  });
+});
+
+describe("reconcileHookPaths — collapses duplicate entries (issue #140)", () => {
+  function commandsFor(
+    settings: Record<string, unknown>,
+    eventType: string
+  ): string[] {
+    const hooks = settings.hooks as Record<string, unknown[]>;
+    const entries = hooks[eventType] as Array<Record<string, unknown>>;
+    return entries.map((entry) => {
+      const innerHooks = entry.hooks as Array<Record<string, string>>;
+      return innerHooks[0].command;
+    });
+  }
+
+  it("collapses every event down to exactly one Conductor entry, including the event that only had one to begin with", () => {
+    const settings = makeDuplicatedSettings(OLD_SCRIPT_BASE_WIN, NEW_SCRIPT_BASE_WIN);
+
+    reconcileHookPaths(settings, NEW_SCRIPT_BASE_WIN);
+
+    const hooks = settings.hooks as Record<string, unknown[]>;
+    expect(hooks.Notification).toHaveLength(1);
+    expect(hooks.UserPromptSubmit).toHaveLength(1);
+    expect(hooks.Stop).toHaveLength(1);
+  });
+
+  it("keeps the current script base and preserves the correct action arg per event after collapsing", () => {
+    const settings = makeDuplicatedSettings(OLD_SCRIPT_BASE_WIN, NEW_SCRIPT_BASE_WIN);
+
+    reconcileHookPaths(settings, NEW_SCRIPT_BASE_WIN);
+
+    expect(commandsFor(settings, "Notification")).toEqual([`${NEW_SCRIPT_BASE_WIN} idle`]);
+    expect(commandsFor(settings, "UserPromptSubmit")).toEqual([
+      `${NEW_SCRIPT_BASE_WIN} active`,
+    ]);
+    expect(commandsFor(settings, "Stop")).toEqual([`${NEW_SCRIPT_BASE_WIN} stop`]);
+  });
+
+  it("is idempotent: reconciling an already-collapsed, already-current settings object is a no-op in entry count", () => {
+    const settings = makeDuplicatedSettings(OLD_SCRIPT_BASE_WIN, NEW_SCRIPT_BASE_WIN);
+    reconcileHookPaths(settings, NEW_SCRIPT_BASE_WIN);
+    reconcileHookPaths(settings, NEW_SCRIPT_BASE_WIN);
+
+    const hooks = settings.hooks as Record<string, unknown[]>;
+    expect(hooks.Notification).toHaveLength(1);
+    expect(hooks.UserPromptSubmit).toHaveLength(1);
+    expect(hooks.Stop).toHaveLength(1);
+  });
+
+  it("never removes entries belonging to other tools, even when a Conductor duplicate is collapsed in the same event", () => {
+    const settings: Record<string, unknown> = {
+      hooks: {
+        Stop: [
+          makeEntry(OLD_SCRIPT_BASE_WIN, "stop"),
+          makeEntry(NEW_SCRIPT_BASE_WIN, "stop"),
+          { hooks: [{ type: "command", command: "some-other-tool stop" }] },
+        ],
+      },
+    };
+
+    reconcileHookPaths(settings, NEW_SCRIPT_BASE_WIN);
+
+    const hooks = settings.hooks as Record<string, unknown[]>;
+    expect(hooks.Stop).toHaveLength(2);
+    const otherToolEntry = (hooks.Stop as Array<Record<string, unknown>>).find(
+      (e) => JSON.stringify(e).includes("some-other-tool")
+    );
+    expect(otherToolEntry).toBeDefined();
+  });
+
+  it("never drops a mixed entry (one entry.hooks array holding BOTH a Conductor command and an unrelated tool's command), even when a same-signature Conductor-only duplicate exists in the same event", () => {
+    // Hazard: hookEntrySignature must key off the marker match, not "any
+    // Conductor command found" -- otherwise a mixed entry produces the same
+    // signature as a pure-Conductor duplicate and gets filtered out,
+    // silently deleting the other tool's command along with it.
+    const settings: Record<string, unknown> = {
+      hooks: {
+        Stop: [
+          makeEntry(OLD_SCRIPT_BASE_WIN, "stop"),
+          {
+            hooks: [
+              { type: "command", command: `${OLD_SCRIPT_BASE_WIN} stop` },
+              { type: "command", command: "some-other-tool stop" },
+            ],
+          },
+        ],
+      },
+    };
+
+    reconcileHookPaths(settings, NEW_SCRIPT_BASE_WIN);
+
+    const hooks = settings.hooks as Record<string, unknown[]>;
+    expect(hooks.Stop).toHaveLength(2);
+    const mixedEntry = (hooks.Stop as Array<Record<string, unknown>>).find(
+      (e) => JSON.stringify(e).includes("some-other-tool")
+    );
+    expect(mixedEntry).toBeDefined();
+    const mixedInnerHooks = mixedEntry?.hooks as Array<Record<string, string>>;
+    expect(mixedInnerHooks.some((h) => h.command === "some-other-tool stop")).toBe(
+      true
+    );
+    // The Conductor command inside the mixed entry still gets its path
+    // rewritten by the separate rewrite loop, even though the entry itself
+    // is not a dedup candidate.
+    expect(
+      mixedInnerHooks.some((h) => h.command === `${NEW_SCRIPT_BASE_WIN} stop`)
+    ).toBe(true);
+  });
+
+  it("does not collapse two genuinely different logical hooks (different matcher) sharing one event", () => {
+    const settings: Record<string, unknown> = {
+      hooks: {
+        Notification: [
+          { matcher: "idle_prompt", hooks: [{ type: "command", command: `${OLD_SCRIPT_BASE_WIN} idle` }] },
+          { matcher: "other_matcher", hooks: [{ type: "command", command: `${OLD_SCRIPT_BASE_WIN} idle` }] },
+        ],
+      },
+    };
+
+    reconcileHookPaths(settings, NEW_SCRIPT_BASE_WIN);
+
+    const hooks = settings.hooks as Record<string, unknown[]>;
+    expect(hooks.Notification).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Integration: ensureHooksInstalled reconciles stale paths silently
 // ---------------------------------------------------------------------------
 
@@ -356,6 +579,46 @@ describe("ensureHooksInstalled — path reconciliation", () => {
       reloadCallArgs,
       "a healthy, already-up-to-date install must not trigger FR-2a's reload prompt"
     ).toBeUndefined();
+  });
+});
+
+describe("ensureHooksInstalled — collapses duplicate entries even when paths are already current (issue #140)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("node: command not found");
+    });
+  });
+
+  it("writes reconciled, deduplicated settings when every duplicate entry already points at the current script base", async () => {
+    // Regression guard for issue #140: a settings.json where every
+    // Conductor-owned entry ALREADY matches the current, correct script base
+    // (so hooksUpToDate() alone would report true) but an event still
+    // carries two entries for it -- the state a settings.json is left in
+    // after a pre-fix reconcile pass rewrote paths without ever collapsing
+    // entry count. Without hooksHaveDuplicateEntries() feeding into
+    // needsReconcile, this case would never even attempt to write.
+    const context = makeContext(NEW_EXT_PATH);
+    const currentScriptBase = getHookScriptPath(context);
+    const duplicatedButCurrentSettings: Record<string, unknown> = {
+      hooks: {
+        Stop: [
+          { hooks: [{ type: "command", command: `${currentScriptBase} stop` }] },
+          { hooks: [{ type: "command", command: `${currentScriptBase} stop` }] },
+        ],
+      },
+    };
+
+    mockNoLockContention(duplicatedButCurrentSettings);
+    const writeMock = fs.writeFileSync as ReturnType<typeof vi.fn>;
+
+    const result = await ensureHooksInstalled(context);
+
+    expect(result).toBe(true);
+    const writes = settingsWrites(writeMock);
+    expect(writes.length).toBeGreaterThanOrEqual(1);
+    const written = JSON.parse(String(writes[writes.length - 1][1]));
+    expect((written.hooks.Stop as unknown[]).length).toBe(1);
   });
 });
 

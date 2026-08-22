@@ -264,13 +264,95 @@ export function hooksUpToDate(
 }
 
 /**
+ * Identify the "logical hook" a Conductor-owned entry represents, independent
+ * of which absolute script path its command currently embeds.
+ *
+ * Two entries are the same logical hook when they share a matcher and an
+ * action argument (idle / active / stop) — the action is always the last
+ * whitespace-delimited token of the command, appended by installHooks()'s
+ * `${scriptBase} ${action}` shape. The command's path prefix is deliberately
+ * excluded from the signature: comparing full command strings is exactly why
+ * duplicate entries were never recognized as duplicates before this fix — an
+ * extension-installed path and a dev-repo-installed path are different
+ * strings but the same logical hook once the marker + matcher + action all
+ * match.
+ *
+ * Returns undefined for entries that are not (wholly) Conductor-owned. An
+ * entry's `hooks` array can hold more than one command — e.g. a settings.json
+ * hand-edited so a Conductor command and an unrelated tool's command share
+ * one entry. Only entries where EVERY inner hook references HOOK_MARKER are
+ * eligible for dedup; a mixed entry still gets its path rewritten by the
+ * caller's separate rewrite loop, but must never be a candidate for removal
+ * — removing it would silently delete the other tool's command too.
+ */
+function hookEntrySignature(entry: Record<string, unknown>): string | undefined {
+  const innerHooks = entry.hooks as Array<Record<string, unknown>> | undefined;
+  if (!innerHooks || innerHooks.length === 0) {
+    return undefined;
+  }
+
+  const commands = innerHooks.map((h) =>
+    typeof h.command === "string" ? h.command : ""
+  );
+  if (!commands.every((cmd) => cmd.includes(HOOK_MARKER))) {
+    return undefined;
+  }
+
+  const cmd = commands[0];
+  const lastSpace = cmd.lastIndexOf(" ");
+  const action = lastSpace !== -1 ? cmd.slice(lastSpace + 1) : "";
+  const matcher = typeof entry.matcher === "string" ? entry.matcher : "";
+  return `${matcher}::${action}`;
+}
+
+/**
+ * Returns true when any hook event has more than one Conductor-owned entry
+ * for the same logical hook (same matcher + action — see hookEntrySignature),
+ * regardless of whether their command paths currently match each other.
+ *
+ * This is deliberately independent of hooksUpToDate(): duplicate entries can
+ * exist even when every one of them already points at the same, current
+ * expectedScriptBase (e.g. after a prior reconcile ran before this fix landed
+ * and rewrote both duplicates' paths without collapsing them) — a check
+ * scoped to path staleness alone would never notice.
+ */
+export function hooksHaveDuplicateEntries(settings: Record<string, unknown>): boolean {
+  const hooks = settings.hooks as Record<string, unknown[]> | undefined;
+  if (!hooks) {
+    return false;
+  }
+
+  for (const entries of Object.values(hooks)) {
+    const seen = new Set<string>();
+    for (const entry of entries as Array<Record<string, unknown>>) {
+      const signature = hookEntrySignature(entry);
+      if (signature === undefined) {
+        continue;
+      }
+      if (seen.has(signature)) {
+        return true;
+      }
+      seen.add(signature);
+    }
+  }
+
+  return false;
+}
+
+/**
  * Rewrite every hook command that contains the session-state.js marker so
  * its leading path portion is replaced with expectedScriptBase, preserving
- * the trailing action argument (idle / active / stop).
+ * the trailing action argument (idle / active / stop) — then collapse any
+ * remaining duplicate Conductor-owned entries (same matcher + action, see
+ * hookEntrySignature) down to a single entry per event, keeping the first
+ * occurrence and dropping the rest.
  *
  * Both Windows git-bash form (`/c/PROGRA~1/nodejs/node.exe /c/Users/...`) and
  * POSIX form (`node /path/to/...`) round-trip correctly because we split on
  * the last space before the action arg to isolate the action, then reconstruct.
+ *
+ * Entries that don't contain the marker (other tools' hooks) are never
+ * touched or counted — dedup only ever removes Conductor-owned entries.
  */
 export function reconcileHookPaths(
   settings: Record<string, unknown>,
@@ -281,8 +363,10 @@ export function reconcileHookPaths(
     return;
   }
 
-  for (const entries of Object.values(hooks)) {
-    for (const entry of entries as Array<Record<string, unknown>>) {
+  for (const eventType of Object.keys(hooks)) {
+    const entries = hooks[eventType] as Array<Record<string, unknown>>;
+
+    for (const entry of entries) {
       const innerHooks = entry.hooks as Array<Record<string, unknown>> | undefined;
       if (!innerHooks) {
         continue;
@@ -298,6 +382,22 @@ export function reconcileHookPaths(
         }
       }
     }
+
+    // Now that every Conductor-owned command in this event has been rewritten
+    // to the same expectedScriptBase, any remaining entries that still share
+    // a signature are true duplicates — collapse to the first occurrence.
+    const seen = new Set<string>();
+    hooks[eventType] = entries.filter((entry) => {
+      const signature = hookEntrySignature(entry);
+      if (signature === undefined) {
+        return true; // not ours; never removed by dedup
+      }
+      if (seen.has(signature)) {
+        return false;
+      }
+      seen.add(signature);
+      return true;
+    });
   }
 }
 
@@ -393,7 +493,9 @@ async function doEnsureHooksInstalled(
   if (hooksInstalled(settings)) {
     const scriptBase = getHookScriptPath(context);
     const needsReconcile =
-      !hooksUpToDate(settings, scriptBase) || recordedHookScriptIsMissing(settings);
+      !hooksUpToDate(settings, scriptBase) ||
+      recordedHookScriptIsMissing(settings) ||
+      hooksHaveDuplicateEntries(settings);
     if (needsReconcile) {
       // Paths are stale (extension updated to a new directory). Silently
       // reconcile — consent was already granted at initial install.
